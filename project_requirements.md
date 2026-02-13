@@ -19,16 +19,16 @@
 
 # AIDE4
 1. Lesson points (70%)
-- a. LLM Inference layer (10%)
-- b. Guardrails layer (10%)
-- c. Data ingestion pipeline at least 3 steps: load, chunk, embed (10%)
-- d. Fine-tuning pipeline with at least 2 steps: fine-tuning, offline evaluation (10%)
+- a. LLM Inference layer (10%).
+- b. Guardrails layer (10%).
+- c. Data ingestion pipeline at least 3 steps: load, chunk, embed (10%).
+- d. Fine-tuning pipeline with at least 2 steps: fine-tuning, offline evaluation (10%).
 - e. Observability layer (10%) using Langfuse.
-- f. Routing layer (10%) with another inference api and a fallback api
-- g. Gateway layer (10%)
+- f. Routing layer (10%) with another inference api and a fallback api.
+- g. Gateway layer (10%).
 2. Design points
 - h. Cache technology selection and resource estimation (5%)
 - i. Storage technology selectuib and resource estimation
-3. Advanced points (20%)
+3. Advanced points (20%).
 - j. Establish comprehensive system monitoring covering logs, metrics, and traces.
-- k. Implement CI/CD
+- k. Implement CI/CD.
