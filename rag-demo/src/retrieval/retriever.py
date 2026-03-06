@@ -1,24 +1,47 @@
-from retrieval.vector_store import VectorStore
 from embedding.embedding import EmbeddingService
+from embedding.bm25_en import BM25Encoder
+from ingestion.qdrant_store import QdrantStore
+from retrieval.reranker import Reranker
 
 
 class Retriever:
     """
-    Orchestrator kết nối EmbeddingService + VectorStore.
-    
-    Luồng hoạt động:
-        index_documents(): texts → embed → store vào FAISS
-        retrieve():        query → embed → search FAISS → trả top-K docs
+    Retriever kết hợp Hybrid Search + Reranking:
+
+        Query
+          ├── Dense Embedding (OpenAI)  ──→ Qdrant dense search  ─┐
+          └── Sparse Embedding (BM25)   ──→ Qdrant sparse search ─┤
+                                                                   ↓
+                                                          RRF Fusion (top 20)
+                                                                   ↓
+                                                          Reranker (top 5)
     """
 
-    def __init__(self, embedding_service: EmbeddingService, vector_store: VectorStore):
+    def __init__(
+            self, 
+            embedding_service: EmbeddingService,
+            bm25_encoder: BM25Encoder,
+            vector_store: QdrantStore,
+            reranker: Reranker = None,
+            initial_top_k: int = 20,
+            final_top_n: int = 5,
+            use_reranker: bool = True, 
+        ):
         """
         Args:
-            embedding_service: Service để chuyển text → vector
-            vector_store: Kho lưu trữ và tìm kiếm vector (FAISS)
+            initial_top_k: Số candidates lấy từ hybrid search
+            final_top_n: Số kết quả cuối sau reranking
+            use_reranker: Tắt reranker nếu cần tốc độ (chỉ dùng hybrid search)
         """
         self.embedding_service = embedding_service
+        self.bm25_encoder = bm25_encoder
         self.vector_store = vector_store
+        self.reranker = reranker or Reranker()
+        self.initial_top_k = initial_top_k
+        self.final_top_n = final_top_n
+        self.use_reranker = use_reranker
+
+    
 
     def index_documents(self, texts: list[str]) -> None:
         """
@@ -39,22 +62,39 @@ class Retriever:
 
         print(f"Indexed {len(texts)} documents successfully.")
 
-    def retrieve(self, query: str, top_k: int = 5) -> list[dict]:
+    def retrieve(self, query: str) -> list[dict]:
         """
-        Tìm top-K tài liệu liên quan nhất với câu query.
-        
+        Retrieve các chunks liên quan nhất với query.
+
         Args:
-            query: Câu hỏi / truy vấn của user
-            top_k: Số kết quả trả về
-            
+            query: Câu hỏi từ người dùng
+
         Returns:
-            List[dict]: Mỗi dict gồm {"text": str, "score": float, "index": int}
+            list[dict]: Top chunks, mỗi item gồm text + score + metadata
         """
         # 1. Embed câu query (single text)
-        query_embedding = self.embedding_service.embed_text(query)
+        query_dense = self.embedding_service.embed_query(query)
+        query_sparse = self.bm25_encoder.encode_query(query)
 
-        # 2. Tìm kiếm trong vector store
-        results = self.vector_store.retrieve_similar(query_embedding, top_k)
+        # 2. Hybrid search trên Qdrant: Kết hợp dense + sparse
+        candidates = self.vector_store.hybrid_search(
+            query_dense=query_dense,
+            query_sparse=query_sparse,
+            top_k=self.initial_top_k,
+        )
+
+        if not candidates:
+            return []
+        
+        # 3. Rerank nếu có candidates và đang bật reranker
+        if self.use_reranker and len(candidates) > self.final_top_n:
+            results = self.reranker.rerank(
+                query=query,
+                candidates=candidates,
+                top_n=self.final_top_n,
+            )
+        else:
+            results = candidates[:self.final_top_n]
 
         return results
 
