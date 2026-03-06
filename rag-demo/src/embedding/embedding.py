@@ -1,33 +1,95 @@
 import os
-from langchain_openai import OpenAIEmbeddings
+from openai import OpenAI
 
 
 class EmbeddingService:
-    def __init__(self, model_name: str = "text-embedding-3-small"):
-        self.model_name = model_name
-        self.api_key = os.getenv("OPENAI_API_KEY")
+    """
+    EmbeddingService: sử dụng OpenAI text-embedding-3-small
+    """
 
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is not set.")
+    def __init__(
+            self, 
+            model: str = "text-embedding-3-small",
+            api_key: str = None,
+        ):
+        """
+        Args:
+            model: Tên model embedding của OpenAI
+            api_key: OpenAI API key (default: lấy từ env OPENAI_API_KEY)
+        """
+        self.model = model
+        self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
 
-        self.embedding_model = OpenAIEmbeddings(
-            model=self.model_name,
-            openai_api_key=self.api_key,
-        )
-        print(f"EmbeddingService initialized with model: {self.model_name}")
+        # Dimension mapping cho các model embedding phổ biến
+        self._dimension = {
+            "text-embedding-3-small": 1536,
+            "text-embedding-3-large": 3072,
+            "text-embedding-ada-002": 1536,
+        }
 
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed nhiều documents (batch)."""
-        try:
-            return self.embedding_model.embed_documents(texts)
-        except Exception as e:
-            print(f"Error embedding documents: {e}")
-            raise
-
+    @property
+    def dimension(self) -> int:
+        """Trả về dimension của embedding vector cho model hiện tại."""
+        return self._dimension.get(self.model, 1536)  # Mặc định 1536 nếu model không có trong mapping
+    
     def embed_text(self, text: str) -> list[float]:
-        """Embed 1 câu query."""
-        try:
-            return self.embedding_model.embed_query(text)
-        except Exception as e:
-            print(f"Error embedding text: {e}")
-            raise
+        """
+        Embed 1 đoạn text thành vector.
+        
+        Args:
+            text: Chuỗi văn bản cần embed.
+
+        Returns:
+            list[float]: Vector embedding của đoạn text.
+        """
+        response = self.client.embeddings.create(
+            input=text,
+            model=self.model,
+        )
+        return response.data[0].embedding
+
+    def embed_documents(self, texts: list[str], batch_size: int = 100) -> list[list[float]]:
+        """
+        Embed nhiều đoạn text thành vectors
+        Tự động chia batch để trách vượt rate limit
+
+        Args:
+            texts: Danh sách chuỗi văn bản cần embed.
+            batch_size: Số text mỗi batch gửi lên API
+
+        Returns:
+            list[list[float]]: Danh sách vector embedding tương ứng với mỗi đoạn text.
+        """
+        all_embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+
+            response = self.client.embeddings.create(
+                input=batch,
+                model=self.model,
+            )
+
+            # Sort by index để đảm bảo thứ tự đúng
+            batch_embeddings = [item.embedding for item in sorted(
+                response.data, key=lambda x: x.index
+            )]
+            all_embeddings.extend(batch_embeddings)
+
+            print(f"Embedding batch {i // batch_size + 1}: {len(batch)} texts")
+        
+        return all_embeddings
+    
+    def embed_query(self, query: str) -> list[float]:
+        """
+        Embed query text cho retrieval.
+        Tách riêng để sau này có thể thêm logic khác cho query vs document.
+
+        Args:
+            query: Câu hỏi cần embed
+
+        Returns:
+            list[float]: Query embedding vector
+        """
+        return self.embed_text(query)
+    
+    
