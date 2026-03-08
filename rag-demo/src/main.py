@@ -1,24 +1,66 @@
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+# src/main.py → lên 1 cấp là rag-demo/ → đó là nơi chứa .env
+_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+load_dotenv(_env_path)
+
+# Debug: xác nhận load đúng
+print(f"  Loading .env from: {os.path.abspath(_env_path)}")
+print(f"  OPENAI_API_KEY set: {bool(os.getenv('OPENAI_API_KEY'))}")
+print(f"  QDRANT_URL: {os.getenv('QDRANT_URL', 'not set')}")
+
 from api.routes import router
 
 app = FastAPI(
-    title="RAG Demo - Legal AI",
-    description=(
-        "## Demo RAG Pipeline gồm 3 phần chính:\n"
-        "1. **Embedding** — Chuyển text → vector\n"
-        "2. **Retrieval** — Tìm tài liệu liên quan bằng FAISS\n"
-        "3. **Generation** — Sinh câu trả lời bằng LLM\n\n"
-        "### Hướng dẫn test:\n"
-        "1. Gọi `/index` để nạp tài liệu\n"
-        "2. Gọi `/retrieve` để test tìm kiếm\n"
-        "3. Gọi `/generate` để chạy full pipeline RAG"
-    ),
+    title="Lex - Legal AI Assistant",
+    description="""
+## Trợ lý pháp lý AI cho luật Việt Nam
+
+### Pipeline
+1. **Ingest** — Upload văn bản luật (PDF/DOCX) → chunk → embed → store vào Qdrant
+2. **Chat** — Hybrid Search (BM25 + Vector) → Rerank → GPT generate
+
+### Models
+- **Embedding**: `text-embedding-3-small` (1536 dims)
+- **LLM**: `gpt-4o-mini`
+- **Vector DB**: Qdrant với RRF fusion
+    """,
     version="1.0.0",
 )
 
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Routes
 app.include_router(router, prefix="/api/v1")
 
+@app.get("/", tags=["System"])
+def root():
+    return {
+        "name": "Lex - Legal AI Assistant",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/api/v1/health",
+    }
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+    )
