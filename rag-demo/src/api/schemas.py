@@ -1,43 +1,54 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Optional
 
-class EmbedRequest(BaseModel):
-    texts: List[str] = Field(..., description="Danh sách văn bản cần embedding")
+# --- Request Schemas ---
+class ChatRequest(BaseModel):
+    query: str = Field(..., description="Câu hỏi của người dùng", min_length=1, max_length=1000)
+    top_k: int = Field(default=5, ge=1, le=20, description="Số chunks trả về sau reranking")
+    use_reranker: bool = Field(default=True, description="Có dùng reranker không")
 
-class EmbedResponse(BaseModel):
-    embeddings: List[List[float]] = Field(..., description="Danh sách embedding vectors")
-    dimension: int = Field(..., description="Số chiều của 1 embedding vector")
-    count: int = Field(..., description="Số lượng vectors")
+class IngestRequest(BaseModel):
+    """
+    Request body cho endpoint /ingest.
+    """
+    file_path: str = Field(..., description="Đường dẫn tới file văn bản cần ingest")
+    is_directory: bool = Field(default=False, description="True nếu file_path là thư mục")
+    recreate_collection: bool = Field(default=False, description="True để xóa collection cũ trước khi ingest")
 
-class IndexRequest(BaseModel):
-    texts: List[str] = Field(..., description="Danh sách documents cần index vào vector store")
+# --- Response Schemas ---
+class SourceChunk(BaseModel):
+    text: str = Field(..., description="Nội dung chunk")
+    score: float = Field(..., description="RRF score từ hybrid search")
+    luat: Optional[str] = Field(None, description="Tên văn bản luật (nếu có)")
+    chuong: Optional[str] = Field(None, description="Chương")
+    muc: Optional[str] = Field(None, description="Mục")
+    dieu: Optional[str] = Field(None, description="Điều")
+    filename: Optional[str] = Field(None, description="Tên file gốc")
 
-class IndexResponse(BaseModel):
-    message: str
-    indexed_count: int
-    total_documents: int
+class ChatResponse(BaseModel):
+    answer: str = Field(..., description="")
+    sources: list[SourceChunk] = Field(default_factory=list, description="Danh sách chunks nguồn đã sử dụng để trả lời")
+    query: str = Field(..., description="Câu hỏi gốc của người dùng")
 
+class IngestResponse(BaseModel):
+    """
+    Response body cho endpoint /ingest.
+    """
+    status: str
+    documents_loaded: int
+    chunks_created: int
+    chunks_stored: int
+    collection_info: dict
 
-class RetrieveRequest(BaseModel):
-    query: str = Field(..., description="Câu hỏi / truy vấn của user")
-    top_k: int = Field(default=5, ge=1, le=20, description="Số lượng tài liệu liên quan cần trả về")
+class CollectionInfoResponse(BaseModel):
+    name: str
+    points_count: int
+    indexed_vectors_count: int
+    segments_count: int
+    status: str
+    dimension: int
 
-class RetrieveResult(BaseModel):
-    text: str
-    score: float
-    index: int
-
-class RetrieveResponse(BaseModel):
-    query: str
-    results: list[RetrieveResult]
-    count: int
-
-class GenerateRequest(BaseModel):
-    question: str = Field(..., description="Câu hỏi của user")
-    top_k: int = Field(default=5, ge=1, le=20, description="Số lượng tài liệu context")
-
-class GenerateResponse(BaseModel):
-    question: str
-    answer: str
-    context: str
-    sources: List[RetrieveResult]
+class HealthResponse(BaseModel):
+    status: str
+    qdrant: str
+    openai_key_set: bool
