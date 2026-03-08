@@ -221,8 +221,9 @@ class QdrantVectorStore:
         info = self.client.get_collection(self.collection_name)
         return {
             "name": self.collection_name,
-            # "vectors_count": info.vectors_count,
             "points_count": info.points_count or 0,
+            "indexed_vectors_count": info.indexed_vectors_count or 0,
+            "segments_count": info.segments_count or 0,
             "status": info.status.value,
             "dimension": self.dimension,
         }
