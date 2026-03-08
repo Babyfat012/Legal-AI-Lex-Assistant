@@ -6,6 +6,9 @@ from ingestion.qdrant_store import QdrantVectorStore
 from embedding.embedding import EmbeddingService
 from embedding.bm25_en import BM25Encoder
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 class IngestionPipeline:
     """
     Orchestrator cho toàn bộ ingestion pipeline:
@@ -19,13 +22,14 @@ class IngestionPipeline:
         embedding_service: EmbeddingService = None,
         bm25_encoder: BM25Encoder = None,
         vector_store: QdrantVectorStore = None,
-        bm25_save_path: str = None,
     ):
         self.loader = loader or DocumentLoader()
         self.chunker = chunker or TextChunker(chunk_size=1024, chunk_overlap=100)
         self.embedding_service = embedding_service or EmbeddingService()
+        default_bm25_path = os.path.join(BASE_DIR, "data", "bm25_vocab.json"),
+
         self.bm25_encoder = bm25_encoder or BM25Encoder(
-            vocab_path=bm25_save_path or "documents/bm25_vocab.json"
+            vocab_path=default_bm25_path
         )
         self.vector_store = vector_store or QdrantVectorStore(
             dimension=self.embedding_service.dimension
