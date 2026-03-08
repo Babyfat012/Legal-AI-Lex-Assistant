@@ -1,6 +1,6 @@
 from embedding.embedding import EmbeddingService
 from embedding.bm25_en import BM25Encoder
-from ingestion.qdrant_store import QdrantStore
+from ingestion.qdrant_store import QdrantVectorStore
 from retrieval.reranker import Reranker
 
 
@@ -21,7 +21,7 @@ class Retriever:
             self, 
             embedding_service: EmbeddingService,
             bm25_encoder: BM25Encoder,
-            vector_store: QdrantStore,
+            vector_store: QdrantVectorStore,
             reranker: Reranker = None,
             initial_top_k: int = 20,
             final_top_n: int = 5,
