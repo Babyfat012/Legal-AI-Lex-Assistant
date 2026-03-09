@@ -26,8 +26,13 @@ class IngestionPipeline:
         embedding_service: EmbeddingService = None,
         bm25_encoder: BM25Encoder = None,
         vector_store: QdrantVectorStore = None,
+        large_file_threshold_mb: float = 10.0,
+        pages_per_batch: int = 20,
     ):
-        self.loader = loader or DocumentLoader()
+        self.loader = loader or DocumentLoader(
+            large_file_threshold_mb=large_file_threshold_mb,
+            pages_per_batch=pages_per_batch,
+        )
         self.chunker = chunker or TextChunker(chunk_size=1024, chunk_overlap=100)
         self.embedding_service = embedding_service or EmbeddingService()
         default_bm25_path = os.path.join(BASE_DIR, "data", "bm25_vocab.json"),
@@ -63,7 +68,13 @@ class IngestionPipeline:
             documents = self.loader.load_directory(source)
         else:
             documents = self.loader.load_file(source)
-        logger.info("[1/5] LOAD done | %d documents | %.2fs", len(documents), time.perf_counter() - t1)
+
+        streaming = any(d.metadata.get("streaming_mode") for d in documents)
+        load_mode = "streaming (page-by-page)" if streaming else "normal"
+        logger.info(
+            "[1/5] LOAD done | %d document(s) | mode=%s | %.2fs",
+            len(documents), load_mode, time.perf_counter() - t1,
+        )
 
         if not documents:
             logger.error("No documents loaded from source: %s", source)
@@ -74,6 +85,15 @@ class IngestionPipeline:
         t2 = time.perf_counter()
         chunks = self.chunker.chunk_documents(documents)
         logger.info("[2/5] CHUNK done | %d chunks | %.2fs", len(chunks), time.perf_counter() - t2)
+
+        # QC stats từ ChunkValidator
+        qc_rejected = self.chunker.validator.rejected_count
+        qc_total = self.chunker.validator.total_count
+        if qc_rejected > 0:
+            logger.warning(
+                "[QC] Đã reject %d/%d chunks do thiếu metadata (chuong/dieu).",
+                qc_rejected, qc_total,
+            )
 
         chunks_texts = [chunk.text for chunk in chunks]
         
@@ -105,8 +125,10 @@ class IngestionPipeline:
         collection_info = self.vector_store.get_collection_info()
         summary = {
             "status": "success",
+            "load_mode": load_mode,
             "documents_loaded": len(documents),
             "chunks_created": len(chunks),
+            "chunks_rejected_by_qc": qc_rejected,
             "dense_embeddings": len(dense_embeddings),
             "sparse_embeddings": len(sparse_embeddings),
             "chunks_stored": stored_count,
