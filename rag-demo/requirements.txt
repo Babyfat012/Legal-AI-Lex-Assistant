@@ -11,6 +11,7 @@ langchain-text-splitters
 qdrant-client
 
 # Document Processing
+pypdf
 markitdown[all]
 docling
 
