@@ -1,10 +1,14 @@
-import os 
+import os
+import time
 from pathlib import Path
 from ingestion.loading import DocumentLoader
 from ingestion.chunking import TextChunker
 from ingestion.qdrant_store import QdrantVectorStore
 from embedding.embedding import EmbeddingService
 from embedding.bm25_en import BM25Encoder
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -47,48 +51,55 @@ class IngestionPipeline:
         Returns:
             dict: Thống kê kết quả pipeline
         """
-        print(f"\n{'='*60}")
-        print(f"  INGESTION PIPELINE")
-        print(f"  Source: {source}")
-        print(f"{'='*60}\n")
+        t_total = time.perf_counter()
+        logger.info("=" * 55)
+        logger.info("INGESTION PIPELINE | source=%s", source)
+        logger.info("=" * 55)
 
         # === 1. LOAD (includes pre-processing: PDF/DOCX → Markdown) ===
-        print("[1/5] LOAD - Reading & converting to Markdown...")
+        logger.info("[1/5] LOAD — Reading & converting to Markdown...")
+        t1 = time.perf_counter()
         if is_directory:
             documents = self.loader.load_directory(source)
         else:
             documents = self.loader.load_file(source)
-        print(f"  -> Loaded {len(documents)} documents.\n")
+        logger.info("[1/5] LOAD done | %d documents | %.2fs", len(documents), time.perf_counter() - t1)
 
         if not documents:
+            logger.error("No documents loaded from source: %s", source)
             return {"status": "error", "message": "No documents loaded from source."}
         
         # === 2. CHUNK (Recursive splitting by legal structure) ===
-        print("[2/5] CHUNK - Splitting by Chương > Điều > Khoản...")
+        logger.info("[2/5] CHUNK — Splitting by Chương > Điều > Khoản...")
+        t2 = time.perf_counter()
         chunks = self.chunker.chunk_documents(documents)
-        print(f"  -> Created {len(chunks)} chunks.\n")
+        logger.info("[2/5] CHUNK done | %d chunks | %.2fs", len(chunks), time.perf_counter() - t2)
 
         chunks_texts = [chunk.text for chunk in chunks]
         
         # 3. FIT BM25 + ENCODE SPARSE
-        print("[3/5] FIT BM25 - Building vocabulary from chunks...")
+        logger.info("[3/5] BM25 — Fitting vocabulary + encoding sparse vectors...")
+        t3 = time.perf_counter()
         self.bm25_encoder.fit(chunks_texts)
         sparse_embeddings = self.bm25_encoder.encode_documents(chunks_texts)
-        print(f"  → {len(sparse_embeddings)} sparse vectors encoded\n")
+        logger.info("[3/5] BM25 done | %d sparse vectors | %.2fs", len(sparse_embeddings), time.perf_counter() - t3)
 
         
         # === 3. EMBED (OpenAI text-embedding-3-small) ===
-        print(f"[4/5] EMBED - Dense encoding with {self.embedding_service.model}...")
+        logger.info("[4/5] EMBED — Dense encoding with %s...", self.embedding_service.model)
+        t4 = time.perf_counter()
         dense_embeddings = self.embedding_service.embed_documents(chunks_texts)
-        print(f"  → {len(dense_embeddings)} dense vectors (dim={len(dense_embeddings[0])})\n")
+        logger.info("[4/5] EMBED done | %d vectors | dim=%d | %.2fs", len(dense_embeddings), len(dense_embeddings[0]), time.perf_counter() - t4)
 
         # === 4. STORE (Save to Qdrant) ===
-        print(f"[5/5] STORE - Saving to Qdrant '{self.vector_store.collection_name}'...")
+        logger.info("[5/5] STORE — Saving to Qdrant '%s'...", self.vector_store.collection_name)
+        t5 = time.perf_counter()
         stored_count = self.vector_store.store_chunks(
             chunks=chunks,
             dense_embeddings=dense_embeddings,
             sparse_embeddings=sparse_embeddings,
         )
+        logger.info("[5/5] STORE done | %d points | %.2fs", stored_count, time.perf_counter() - t5)
 
         # === Final stats ===
         collection_info = self.vector_store.get_collection_info()
@@ -102,12 +113,11 @@ class IngestionPipeline:
             "collection_info": collection_info,
         }
 
-        print(f"\n{'='*60}")
-        print(f"  PIPELINE COMPLETED")
-        print(f"  Documents : {len(documents)}")
-        print(f"  Chunks    : {len(chunks)}")
-        print(f"  Stored    : {stored_count} points (dense + sparse)")
-        print(f"{'='*60}\n")
+        total_elapsed = time.perf_counter() - t_total
+        logger.info("=" * 55)
+        logger.info("PIPELINE COMPLETED | docs=%d | chunks=%d | stored=%d | total=%.2fs",
+                    len(documents), len(chunks), stored_count, total_elapsed)
+        logger.info("=" * 55)
 
         return summary
     
@@ -122,10 +132,10 @@ class IngestionPipeline:
         Returns:
             list[dict]: Kết quả gồm text, score, metadata
         """
-        print(f"  Query: '{query}'")
+        logger.info("Pipeline search | query: %.80s | top_k=%d", query, top_k)
         query_dense = self.embedding_service.embed_query(query)
         query_sparse = self.bm25_encoder.encode_query(query)
         results = self.vector_store.hybrid_search(query_dense, query_sparse, top_k=top_k)
-        print(f"  Found {len(results)} results")
+        logger.info("Pipeline search → %d results", len(results))
         return results
     
