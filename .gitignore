@@ -3,3 +3,5 @@
 .env
 .env.*
 /documents/
+rag-demo/logs/*.log
+rag-demo/logs/*.log.*
