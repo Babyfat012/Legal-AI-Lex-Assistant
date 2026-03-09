@@ -1,7 +1,11 @@
+import time
 from embedding.embedding import EmbeddingService
 from embedding.bm25_en import BM25Encoder
 from ingestion.qdrant_store import QdrantVectorStore
 from retrieval.reranker import Reranker
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class Retriever:
@@ -40,6 +44,10 @@ class Retriever:
         self.initial_top_k = initial_top_k
         self.final_top_n = final_top_n
         self.use_reranker = use_reranker
+        logger.info(
+            "Retriever initialized | initial_top_k=%d | final_top_n=%d | use_reranker=%s",
+            initial_top_k, final_top_n, use_reranker,
+        )
 
     
 
@@ -51,7 +59,7 @@ class Retriever:
             texts: Danh sách văn bản cần index
         """
         if not texts:
-            print("Warning: No texts to index.")
+            logger.warning("index_documents called with empty texts list")
             return
 
         # 1. Embed tất cả documents (batch)
@@ -60,7 +68,7 @@ class Retriever:
         # 2. Lưu vào vector store
         self.vector_store.add_documents(texts, embeddings)
 
-        print(f"Indexed {len(texts)} documents successfully.")
+        logger.info("Indexed %d documents successfully", len(texts))
 
     def retrieve(self, query: str) -> list[dict]:
         """
@@ -72,9 +80,16 @@ class Retriever:
         Returns:
             list[dict]: Top chunks, mỗi item gồm text + score + metadata
         """
+        logger.info("Retrieval START | query: %.80s", query)
+        t0 = time.perf_counter()
+
         # 1. Embed câu query (single text)
         query_dense = self.embedding_service.embed_query(query)
         query_sparse = self.bm25_encoder.encode_query(query)
+        logger.debug(
+            "Query embedded | dense_dim=%d | sparse_nnz=%d",
+            len(query_dense), len(query_sparse.indices),
+        )
 
         # 2. Hybrid search trên Qdrant: Kết hợp dense + sparse
         candidates = self.vector_store.hybrid_search(
@@ -82,8 +97,10 @@ class Retriever:
             query_sparse=query_sparse,
             top_k=self.initial_top_k,
         )
+        logger.info("Hybrid search → %d candidates", len(candidates))
 
         if not candidates:
+            logger.warning("No candidates found — returning empty list")
             return []
         
         # 3. Rerank nếu có candidates và đang bật reranker
@@ -96,6 +113,10 @@ class Retriever:
         else:
             results = candidates[:self.final_top_n]
 
+        logger.info(
+            "Retrieval END → %d results | total=%.2fs",
+            len(results), time.perf_counter() - t0,
+        )
         return results
 
     def retrieve_with_context(self, query: str, top_k: int = 5) -> str:
