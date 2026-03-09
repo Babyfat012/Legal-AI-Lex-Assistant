@@ -22,7 +22,6 @@ class EmbeddingService:
         """
         self.model = model
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
-        logger.info("EmbeddingService initialized | model=%s | dim=%d", model, self.dimension)
 
         # Dimension mapping cho các model embedding phổ biến
         self._dimension = {
@@ -30,6 +29,10 @@ class EmbeddingService:
             "text-embedding-3-large": 3072,
             "text-embedding-ada-002": 1536,
         }
+        
+        logger.info("EmbeddingService initialized | model=%s | dim=%d", model, self.dimension)
+
+        
 
     @property
     def dimension(self) -> int:
