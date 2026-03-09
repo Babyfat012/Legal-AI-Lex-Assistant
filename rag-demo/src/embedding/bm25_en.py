@@ -2,6 +2,9 @@ import os
 import json
 from pathlib import Path
 from qdrant_client.models import SparseVector
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class BM25Encoder:
@@ -50,7 +53,7 @@ class BM25Encoder:
         """
         import math
 
-        print(f"  Fitting BM25 on {len(texts)} documents...")
+        logger.info("Fitting BM25 on %d documents...", len(texts))
 
         # Tokenize tất cả documents
         tokenized_docs = [self._tokenize(t) for t in texts]
@@ -72,7 +75,7 @@ class BM25Encoder:
         }
         
         self._fitted = True
-        print(f"  BM25 vocabulary size: {len(self.vocab)} tokens")
+        logger.info("BM25 fit complete | vocab_size=%d tokens", len(self.vocab))
 
         # Lưu vocab/idf nếu có đường dẫn
         if self.vocab_path:
@@ -149,7 +152,7 @@ class BM25Encoder:
         }
         with open (path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"Saved BM25 to {path}")
+        logger.info("BM25 vocab saved | path=%s | tokens=%d", path, len(self.vocab))
 
     def load(self, path: str):
         """Load vocab + IDF từ file JSON."""
@@ -158,7 +161,7 @@ class BM25Encoder:
         self.vocab = data["vocab"]
         self.idf = data["idf"]
         self._fitted = True
-        print(f"Loaded BM25 from {path} (tokens={len(self.vocab)})")
+        logger.info("BM25 vocab loaded | path=%s | tokens=%d", path, len(self.vocab))
 
 
     
