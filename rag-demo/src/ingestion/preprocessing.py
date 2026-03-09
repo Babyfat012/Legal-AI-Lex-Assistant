@@ -52,7 +52,7 @@ class MarkdownConverter:
         
         if ext in {".txt", ".md"}:
             # Nếu đã là txt/md thì chỉ cần đọc nội dung
-            markdown = path.read_text(encoding="utf-8")
+            raw_md = path.read_text(encoding="utf-8")
         else:
             if self.backend == ConverterBackend.MARKITDOWN:
                 raw_md = self._convert_with_markitdown(path)
@@ -147,7 +147,37 @@ class MarkdownConverter:
         return result.document.export_to_markdown()
     
 
-    # Post-process markdown để chuẩn hóa heading theo cấu trúc luật VN
+    # -------------------------------------------------------------------------
+    # Post-processing: chuẩn hóa heading theo cấu trúc luật VN
+    # -------------------------------------------------------------------------
+
+    def _clean_raw_text(self, text: str) -> str:
+        """
+        Làm sạch text thô trước khi xử lý Markdown heading.
+
+        Xử lý các artifacts phổ biến khi extract từ PDF:
+
+        1. **Null bytes** (``\x00`` / ``\u0000``): thay bằng space.
+           Đây là vấn đề cực kỳ phổ biến khi ``pypdf`` extract PDF dùng
+           CID/Type0 fonts (ví dụ nhiều văn bản luật VN scan bằng OCR).
+           Null bytes phá vỡ hoàn toàn regex heading, khiến ``CHƯƠNG\x0010``
+           không bao giờ được normalize thành ``## Chương 10``, dẫn đến
+           metadata ``chuong``/``dieu`` trống và retrieval hoàn toàn thất bại.
+
+        2. **Nhiều space liên tiếp** (không phải newline) → 1 space:
+           Sau bước 1, có thể xuất hiện double-space do thay null bằng space
+           cạnh space sẵn có.
+
+        3. **Quá nhiều dòng trống liên tiếp** → tối đa 2 dòng trống.
+        """
+        # 1. Null bytes → space
+        text = text.replace("\x00", " ")
+        # 2. Multiple non-newline whitespace → single space
+        text = re.sub(r"[^\S\n]+", " ", text)
+        # 3. Cap consecutive blank lines at 2
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text
+
     def _post_process_legal(self, text: str) -> str:
         """
         Chuẩn hóa văn bản luật VN sang Markdown headings.
@@ -160,37 +190,103 @@ class MarkdownConverter:
             1. 2. 3. ...  → giữ nguyên (Khoản)
             a) b) c) ...  → giữ nguyên (Điểm)
 
-        Chuẩn hóa thêm:
-            - Xóa khoảng trắng thừa
-            - Thống nhất format số La Mã / số thường cho Chương
+        Pipeline:
+            0. Làm sạch null bytes và artifacts PDF (``_clean_raw_text``)
+            1. Gộp tiêu đề bị ngắt 2 dòng (look-ahead buffer)
+            2. Chuẩn hóa từng dòng thành Markdown heading
+            3. Dọn dẹp khoảng trắng thừa
         """
-        lines = text.split("\n")
-        processed_lines = []
+        # Bước 0: làm sạch artifacts PDF (null bytes, v.v.) TRƯỚC KHI xử lý
+        text = self._clean_raw_text(text)
 
+        lines = text.split("\n")
+
+        # Bước 1: Gộp tiêu đề bị ngắt quãng thành 2 dòng
+        lines = self._merge_broken_headings(lines)
+
+        processed_lines = []
         for line in lines:
             stripped = line.strip()
             if not stripped:
                 processed_lines.append("")
+                continue  # FIX: trước đây thiếu continue, gây ra dòng trống bị nhân đôi
 
             processed_line = self._normalize_legal_heading(stripped)
             processed_lines.append(processed_line)
 
         result = "\n".join(processed_lines)
-
-        # Xóa khoảng trắng thừa (nếu có)
         result = re.sub(r"\n{3,}", "\n\n", result)
-
         return result.strip()
-    
+
+    def _merge_broken_headings(self, lines: list[str]) -> list[str]:
+        """
+        Gộp tiêu đề bị ngắt quãng thành 2 dòng (do converter PDF/DOCX).
+
+        VD input:
+            ["#### Điều 15.", "Quy định về biển báo hiệu đường bộ"]
+        VD output:
+            ["#### Điều 15. Quy định về biển báo hiệu đường bộ"]
+
+        Logic: Khi gặp một dòng là tiêu đề "partial" (không có phần title),
+        peek dòng tiếp theo. Nếu dòng tiếp không phải đầu mục mới → gộp lại.
+        """
+        result = []
+        i = 0
+        while i < len(lines):
+            current = lines[i].strip()
+            if i + 1 < len(lines) and self._is_partial_heading(current):
+                next_line = lines[i + 1].strip()
+                # Gộp nếu dòng tiếp KHÔNG phải heading mới và KHÔNG rỗng
+                if next_line and not self._is_heading_candidate(next_line):
+                    sep = " " if current.endswith(".") else ". "
+                    result.append(current + sep + next_line)
+                    i += 2
+                    continue
+            result.append(lines[i])
+            i += 1
+        return result
+
+    def _is_partial_heading(self, line: str) -> bool:
+        """
+        Kiểm tra dòng có phải là tiêu đề chưa có phần title không.
+        VD: "#### Điều 15.", "CHƯƠNG I", "**Mục 2.**"
+        """
+        # Strip markdown decorators trước khi kiểm tra
+        clean = re.sub(r"^[\s*_#]+|[\s*_#]+$", "", line).strip()
+        patterns = [
+            r"^(?:PHẦN|CHƯƠNG|MỤC)\s+(?:THỨ\s+\w+|[IVXLCDM]+|\d+)[\.:]?\s*$",
+            r"^(?:Điều|ĐIỀU)\s+[\d]+[a-z]?[\.:\s]*$",
+        ]
+        return any(re.match(p, clean, re.IGNORECASE) for p in patterns)
+
+    def _is_heading_candidate(self, line: str) -> bool:
+        """
+        Kiểm tra dòng có phải là bắt đầu một đầu mục mới không.
+        VD: "CHƯƠNG II", "Điều 8", "**MỤC 3**"
+        """
+        clean = re.sub(r"^[\s*_#]+|[\s*_#]+$", "", line).strip()
+        return bool(
+            re.match(r"^(?:PHẦN|CHƯƠNG|MỤC|Điều|ĐIỀU)\s+", clean, re.IGNORECASE)
+        )
+
     def _normalize_legal_heading(self, line: str) -> str:
         """
-        Nhận diện và chuyển đổi 1 dòng thành Markdown heading nếu nó là
+        Nhận diện và chuyển đổi 1 dòng thành Markdown heading nếu là
         tiêu đề cấu trúc luật.
+
+        Nâng cấp so với phiên bản cũ:
+            - Strip Markdown decorators (**..**, *..*, _.._) trước khi match
+            - Hỗ trợ số có ký tự chữ: Điều 12a, Điều 12b (thực tế văn bản luật)
         """
-        # PHẦN (cấp cao nhất, ít gặp)
+        # Bước 1: Strip Markdown decorators bao quanh dòng (**..**, *..*, _.._)
+        # Giữ nguyên ký tự # (heading marker) — đã được xử lý bởi (?:#+\s*)? trong regex
+        clean = re.sub(r"^\s*[*_]+\s*", "", line)
+        clean = re.sub(r"\s*[*_]+\s*$", "", clean).strip()
+
+        # PHẦN (cấp cao nhất)
         match = re.match(
             r"^(?:#+\s*)?PHẦN\s+(THỨ\s+\w+|[IVXLCDM]+|\d+)[\.:]?\s*[-–]?\s*(.*)",
-            line,
+            clean,
             re.IGNORECASE,
         )
         if match:
@@ -204,7 +300,7 @@ class MarkdownConverter:
         # CHƯƠNG
         match = re.match(
             r"^(?:#+\s*)?CHƯƠNG\s+([IVXLCDM]+|\d+)[\.:]?\s*[-–]?\s*(.*)",
-            line,
+            clean,
             re.IGNORECASE,
         )
         if match:
@@ -217,7 +313,7 @@ class MarkdownConverter:
 
         # MỤC
         match = re.match(
-            r"^(?:#+\s*)?MỤC\s+(\d+)[\.:]?\s*(.*)", line, re.IGNORECASE
+            r"^(?:#+\s*)?MỤC\s+(\d+)[\.:]?\s*(.*)", clean, re.IGNORECASE
         )
         if match:
             num = match.group(1).strip()
@@ -227,9 +323,11 @@ class MarkdownConverter:
                 heading += f". {title}"
             return heading
 
-        # ĐIỀU
+        # ĐIỀU — hỗ trợ số có ký tự chữ: Điều 12a, Điều 12b
         match = re.match(
-            r"^(?:#+\s*)?Điều\s+(\d+)[\.:]?\s*(.*)", line, re.IGNORECASE
+            r"^(?:#+\s*)?(?:Điều|ĐIỀU)\s+([\d]+[a-z]?)[\.:\s\-]*(.*)",
+            clean,
+            re.IGNORECASE,
         )
         if match:
             num = match.group(1).strip()
