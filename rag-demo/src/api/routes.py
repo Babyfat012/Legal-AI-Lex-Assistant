@@ -16,6 +16,7 @@ from embedding.embedding import EmbeddingService
 from embedding.bm25_en import BM25Encoder
 from retrieval.retriever import Retriever
 from retrieval.reranker import Reranker
+from retrieval.query_analyzer import QueryAnalyzer
 from generator.llm_generator import LLMGenerator
 from core.logger import get_logger
 
@@ -71,6 +72,10 @@ def get_generator() -> LLMGenerator:
     return LLMGenerator()
 
 @lru_cache(maxsize=1)
+def get_query_analyzer() -> QueryAnalyzer:
+    return QueryAnalyzer()
+
+@lru_cache(maxsize=1)
 def get_pipeline() -> IngestionPipeline:
     embedding_service = get_embedding_service()
     bm25_path = os.getenv("BM25_VOCAB_PATH", "data/bm25_vocab.json")
@@ -105,40 +110,70 @@ def chat(
     request: ChatRequest,
     retriever: Retriever = Depends(get_retriever),
     generator: LLMGenerator = Depends(get_generator),
+    query_analyzer: QueryAnalyzer = Depends(get_query_analyzer),
 ):
     """
-    RAG pipeline: Query → Hybrid Search → Rerank → Generate.
+    RAG pipeline với 2 chế độ:
 
-    1. Embed query (dense + sparse BM25)
-    2. Hybrid search trong Qdrant (RRF fusion)
-    3. Rerank top candidates
-    4. Generate câu trả lời với GPT
+    **Standard mode** (``reasoning_mode=false``):
+        Query → Hybrid Search → Rerank → Generate
+
+    **Reasoning mode** (``reasoning_mode=true``):
+        Query → Decompose + HyDE → Multi-search → Merge → Rerank → CoT Generate
+
+    Reasoning mode phù hợp với câu hỏi tranh chấp / tình huống / xác định lỗi.
     """
-    logger.info("POST /chat | query: %.80s | top_k=%d | use_reranker=%s",
-                request.query, request.top_k, request.use_reranker)
+    logger.info(
+        "POST /chat | query: %.80s | top_k=%d | use_reranker=%s | reasoning_mode=%s",
+        request.query, request.top_k, request.use_reranker, request.reasoning_mode,
+    )
     t0 = time.perf_counter()
     try:
-        # Override retriever config theo request
         retriever.use_reranker = request.use_reranker
         retriever.final_top_n = request.top_k
 
-        # 1. Retrieve
-        chunks = retriever.retrieve(request.query)
+        # ── Xác định mode ──────────────────────────────────────────────
+        use_reasoning = request.reasoning_mode or query_analyzer.is_complex(request.query)
+        mode = "reasoning" if use_reasoning else "standard"
+        sub_queries: list[str] = []
+        hyde_doc: str | None = None
+        reasoning_steps: dict | None = None
+
+        # ── Retrieval ──────────────────────────────────────────────────
+        if use_reasoning:
+            logger.info("Mode=reasoning | activating Query Decomposition + HyDE")
+            chunks, sub_queries, hyde_doc = retriever.retrieve_advanced(
+                query=request.query,
+                query_analyzer=query_analyzer,
+                use_hyde=True,
+                use_decomposition=True,
+            )
+        else:
+            chunks = retriever.retrieve(request.query)
 
         if not chunks:
             return ChatResponse(
                 answer="Tôi không tìm thấy thông tin liên quan trong các văn bản pháp luật được cung cấp.",
                 sources=[],
                 query=request.query,
+                mode=mode,
+                sub_queries=sub_queries,
+                hyde_doc=hyde_doc,
             )
-        
-        # 2. Generate
-        answer = generator.generate(
-            query=request.query,
-            context_chunks=chunks,
-        )
 
-        # 3. Format sources
+        # ── Generation ─────────────────────────────────────────────────
+        if use_reasoning:
+            answer, reasoning_steps = generator.generate_with_reasoning(
+                query=request.query,
+                context_chunks=chunks,
+            )
+        else:
+            answer = generator.generate(
+                query=request.query,
+                context_chunks=chunks,
+            )
+
+        # ── Format sources ─────────────────────────────────────────────
         sources = [
             SourceChunk(
                 text=chunk["text"],
@@ -153,12 +188,20 @@ def chat(
             for chunk in chunks
         ]
 
+        logger.info(
+            "POST /chat done | mode=%s | chunks=%d | %.2fs",
+            mode, len(chunks), time.perf_counter() - t0,
+        )
         return ChatResponse(
             answer=answer,
             sources=sources,
             query=request.query,
+            mode=mode,
+            sub_queries=sub_queries,
+            hyde_doc=hyde_doc,
+            reasoning_steps=reasoning_steps or None,
         )
-    
+
     except RuntimeError as e:
         logger.error("Runtime error during /chat: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

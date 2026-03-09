@@ -1,11 +1,19 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Any
 
 # --- Request Schemas ---
 class ChatRequest(BaseModel):
-    query: str = Field(..., description="Câu hỏi của người dùng", min_length=1, max_length=1000)
+    query: str = Field(..., description="Câu hỏi của người dùng", min_length=1, max_length=2000)
     top_k: int = Field(default=5, ge=1, le=20, description="Số chunks trả về sau reranking")
     use_reranker: bool = Field(default=True, description="Có dùng reranker không")
+    reasoning_mode: bool = Field(
+        default=False,
+        description=(
+            "Bật chế độ phân tích pháp lý nâng cao (Legal Syllogism). "
+            "Khi True: Query Decomposition + HyDE + Chain-of-Thought generation. "
+            "Phù hợp với câu hỏi tranh chấp / tình huống / xác định lỗi."
+        ),
+    )
 
 class IngestRequest(BaseModel):
     """
@@ -19,6 +27,7 @@ class IngestRequest(BaseModel):
 class SourceChunk(BaseModel):
     text: str = Field(..., description="Nội dung chunk")
     score: float = Field(..., description="RRF score từ hybrid search")
+    rerank_score: Optional[float] = Field(None, description="Điểm rerank từ LLM (nếu có)")
     luat: Optional[str] = Field(None, description="Tên văn bản luật (nếu có)")
     chuong: Optional[str] = Field(None, description="Chương")
     muc: Optional[str] = Field(None, description="Mục")
@@ -26,9 +35,29 @@ class SourceChunk(BaseModel):
     filename: Optional[str] = Field(None, description="Tên file gốc")
 
 class ChatResponse(BaseModel):
-    answer: str = Field(..., description="")
-    sources: list[SourceChunk] = Field(default_factory=list, description="Danh sách chunks nguồn đã sử dụng để trả lời")
+    answer: str = Field(..., description="Câu trả lời (hoặc phân tích pháp lý đầy đủ)")
+    sources: list[SourceChunk] = Field(default_factory=list, description="Danh sách chunks nguồn đã sử dụng")
     query: str = Field(..., description="Câu hỏi gốc của người dùng")
+    mode: str = Field(
+        default="standard",
+        description="Chế độ xử lý: 'standard' hoặc 'reasoning'",
+    )
+    sub_queries: list[str] = Field(
+        default_factory=list,
+        description="Sub-queries được tạo ra từ Query Decomposition (chỉ có ở reasoning mode)",
+    )
+    hyde_doc: Optional[str] = Field(
+        None,
+        description="Hypothetical Document được tạo ra bởi HyDE (chỉ có ở reasoning mode)",
+    )
+    reasoning_steps: Optional[dict[str, Any]] = Field(
+        None,
+        description=(
+            "Kết quả phân tích Tam đoạn luận có cấu trúc. "
+            "Chỉ có ở reasoning mode. "
+            "Gồm: hanh_vi, quy_dinh (list), doi_chieu, ket_luan."
+        ),
+    )
 
 class IngestResponse(BaseModel):
     """
