@@ -1,5 +1,9 @@
 import os
+import time
 from openai import OpenAI
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 SYSTEM_PROMPT = """
 Bạn là Lex — trợ lý pháp lý AI chuyên về luật Việt Nam.
@@ -45,6 +49,10 @@ class LLMGenerator:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
+        logger.info(
+            "LLMGenerator initialized | model=%s | max_tokens=%d | temperature=%.1f",
+            model, max_tokens, temperature,
+        )
 
     def generate(self, query: str, context_chunks: list[dict]) -> str:
         """
@@ -58,6 +66,9 @@ class LLMGenerator:
         Returns:
             str: Câu trả lời từ LLM
         """
+        logger.info("Generating answer | context_chunks=%d | query: %.80s", len(context_chunks), query)
+        t0 = time.perf_counter()
+
         # Format context từ các chunks
         context = self._format_context(context_chunks)
 
@@ -75,6 +86,14 @@ class LLMGenerator:
             ],
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+        )
+        usage = response.usage
+        logger.info(
+            "Generation done in %.2fs | tokens: prompt=%d completion=%d total=%d",
+            time.perf_counter() - t0,
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            usage.total_tokens,
         )
         return response.choices[0].message.content.strip()
     

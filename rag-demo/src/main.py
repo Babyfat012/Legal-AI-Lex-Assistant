@@ -7,15 +7,17 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 # src/main.py → lên 1 cấp là rag-demo/ → đó là nơi chứa .env
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
 load_dotenv(_env_path)
 
-# Debug: xác nhận load đúng
-print(f"  Loading .env from: {os.path.abspath(_env_path)}")
-print(f"  OPENAI_API_KEY set: {bool(os.getenv('OPENAI_API_KEY'))}")
-print(f"  QDRANT_URL: {os.getenv('QDRANT_URL', 'not set')}")
+logger.debug("Loading .env from: %s", os.path.abspath(_env_path))
+logger.info("OPENAI_API_KEY set: %s", bool(os.getenv("OPENAI_API_KEY")))
+logger.info("QDRANT_URL: %s", os.getenv("QDRANT_URL", "not set"))
 
 from api.routes import router
 

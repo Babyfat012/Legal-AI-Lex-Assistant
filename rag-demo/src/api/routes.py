@@ -1,4 +1,6 @@
-import os 
+import os
+import time
+import traceback
 from fastapi import APIRouter, HTTPException, Depends
 from functools import lru_cache
 
@@ -15,10 +17,9 @@ from embedding.bm25_en import BM25Encoder
 from retrieval.retriever import Retriever
 from retrieval.reranker import Reranker
 from generator.llm_generator import LLMGenerator
-import traceback
-import logging
+from core.logger import get_logger
 
-logging = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -84,6 +85,7 @@ def get_pipeline() -> IngestionPipeline:
 @router.get("/health", response_model=HealthResponse, tags=["System"])
 def health_check():
     """Kiểm tra trạng thái hệ thống."""
+    logger.info("GET /health")
     qdrant_status = "unreachable"
     try:
         store = get_vector_store()
@@ -112,6 +114,9 @@ def chat(
     3. Rerank top candidates
     4. Generate câu trả lời với GPT
     """
+    logger.info("POST /chat | query: %.80s | top_k=%d | use_reranker=%s",
+                request.query, request.top_k, request.use_reranker)
+    t0 = time.perf_counter()
     try:
         # Override retriever config theo request
         retriever.use_reranker = request.use_reranker
@@ -155,11 +160,10 @@ def chat(
         )
     
     except RuntimeError as e:
-        logging.error(f"Runtime error during /chat: {str(e)}")
+        logger.error("Runtime error during /chat: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        # Log full traceback for unexpected errors
-        logging.error(f"Error in /chat:\n{traceback.format_exc()}")
+        logger.error("Unexpected error in /chat:\n%s", traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -173,6 +177,8 @@ def ingest(
 
     Pipeline: Load → Pre-process → Chunk → Embed (Dense+Sparse) → Store
     """
+    logger.info("POST /ingest | file=%s | is_dir=%s | recreate=%s",
+                request.file_path, request.is_directory, request.recreate_collection)
     if not os.path.exists(request.file_path):
         raise HTTPException(
             status_code=400,
