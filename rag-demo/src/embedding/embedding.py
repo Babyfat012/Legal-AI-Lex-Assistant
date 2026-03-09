@@ -1,5 +1,8 @@
 import os
 from openai import OpenAI
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class EmbeddingService:
@@ -19,6 +22,7 @@ class EmbeddingService:
         """
         self.model = model
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
+        logger.info("EmbeddingService initialized | model=%s | dim=%d", model, self.dimension)
 
         # Dimension mapping cho các model embedding phổ biến
         self._dimension = {
@@ -75,8 +79,10 @@ class EmbeddingService:
             )]
             all_embeddings.extend(batch_embeddings)
 
-            print(f"Embedding batch {i // batch_size + 1}: {len(batch)} texts")
+            logger.debug("Embedded batch %d/%d | %d texts",
+                         i // batch_size + 1, -(-len(texts) // batch_size), len(batch))
         
+        logger.info("Embedding complete | %d vectors | dim=%d", len(all_embeddings), len(all_embeddings[0]) if all_embeddings else 0)
         return all_embeddings
     
     def embed_query(self, query: str) -> list[float]:
