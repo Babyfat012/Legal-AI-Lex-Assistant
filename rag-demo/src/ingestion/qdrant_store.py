@@ -1,5 +1,6 @@
-import os 
-import uuid 
+import os
+import time
+import uuid
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     VectorParams,
@@ -11,8 +12,12 @@ from qdrant_client.models import (
     Prefetch,
     FusionQuery,
     Fusion,
+    ScoredPoint
 )
 from ingestion.chunking import Chunk
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 DENSE_VECTOR_NAME = "dense"
 SPARSE_VECTOR_NAME = "sparse"
@@ -31,17 +36,28 @@ class QdrantVectorStore:
             collection_name: str = "legal_documents",
             dimension: int = 1536,
             url: str = None,
+            # Tăng prefetch để RRF có nhiều candidates hơn, cải thiện chất lượng rerank
+            dense_prefetch_multiplier: int = 3,
+            sparse_prefetch_multiplier: int = 3,
     ):
         """
         Args: 
             collection_name: Tên collection trong Qdrant để lưu trữ vectors
             dimension: Dimension của embedding vector (phải khớp với model embedding)
             url: URL của Qdrant server (default: "http://localhost:6333")
+            dense_prefetch_multiplier: Hệ số nhân để tăng số candidates lấy từ dense search (vd: 3 → lấy 60 nếu top_k=20)
+            sparse_prefetch_multiplier: Hệ số nhân để tăng số candidates lấy từ sparse search    
         """
         self.collection_name = collection_name
         self.dimension = dimension
         self.url = url or os.getenv("QDRANT_URL", "http://localhost:6333")
+        self.dense_prefetch_multiplier = dense_prefetch_multiplier
+        self.sparse_prefetch_multiplier = sparse_prefetch_multiplier
         self.client = QdrantClient(url=self.url)
+        logger.info(
+            "QdrantVectorStore init | collection=%s | dim=%d | url=%s",
+            collection_name, dimension, self.url,
+        )
         self._ensure_collection()
 
     def _ensure_collection(self):
@@ -62,11 +78,16 @@ class QdrantVectorStore:
                             DENSE_VECTOR_NAME not in existing_vectors
 
             if is_old_schema:
-                print(f"  ⚠️  Collection '{self.collection_name}' có schema cũ (unnamed vectors).")
-                print(f"  ⚠️  Đang xóa và tạo lại với schema mới (named dense + sparse)...")
+                logger.warning(
+                    "Collection '%s' có schema cũ (unnamed vectors) — đang xóa và tạo lại...",
+                    self.collection_name,
+                )
                 self.client.delete_collection(self.collection_name)
             else:
-                print(f"  Using existing collection: '{self.collection_name}' ({info.points_count} points)")
+                logger.info(
+                    "Using existing collection '%s' | points=%s",
+                    self.collection_name, info.points_count,
+                )
                 return
 
         self.client.create_collection(
@@ -83,7 +104,10 @@ class QdrantVectorStore:
                 ),
             },
         )
-        print(f"  Created collection '{self.collection_name}' (dense={self.dimension}d + sparse BM25)")
+        logger.info(
+            "Created collection '%s' | dense=%dd + sparse BM25",
+            self.collection_name, self.dimension,
+        )
 
     
     def store_chunks(
@@ -125,6 +149,12 @@ class QdrantVectorStore:
                 )
             )
 
+        logger.info(
+            "Storing %d chunks into '%s' | batch_size=%d",
+            len(chunks), self.collection_name, batch_size,
+        )
+        t0 = time.perf_counter()
+
         # Upsert theo batch
         total_stored = 0
         for i in range(0, len(points), batch_size):
@@ -134,9 +164,12 @@ class QdrantVectorStore:
                 points=batch,
             )
             total_stored += len(batch)
-            print(f" Upserted batch {i // batch_size + 1}: {len(batch)} points")
+            logger.debug("Upserted batch %d | %d points", i // batch_size + 1, len(batch))
 
-        print(f"  Total stored: {total_stored} points into '{self.collection_name}'")
+        logger.info(
+            "Store complete | %d points in '%.1fs' → '%s'",
+            total_stored, time.perf_counter() - t0, self.collection_name,
+        )
         return total_stored
     
     def hybrid_search(
@@ -144,6 +177,7 @@ class QdrantVectorStore:
         query_dense: list[float],
         query_sparse: SparseVector,
         top_k: int = 20,
+        score_threshold: float = None,
     ) -> list[dict]:
         """
         Hybrid search: Dense + Sparse kết hợp bằng Reciprocal Rank Fusion.
@@ -152,32 +186,47 @@ class QdrantVectorStore:
             query_dense: Dense embedding của query
             query_sparse: Sparse embedding của query
             top_k: Số kết quả trả về sau fusion
+            score_threshold: Lọc bỏ kết quả có RRF score thấp hơn ngưỡng (None = không lọc)
 
         Returns:
             list[dict]: Kết quả đã fusion, gồm text + score + metadata
         """
+        # Mỗi branch lấy nhiều hơn top_k để RRF có pool candidates đủ lớn
+        dense_limit = top_k * self.dense_prefetch_multiplier
+        sparse_limit = top_k * self.sparse_prefetch_multiplier
+        logger.debug(
+            "Hybrid search | top_k=%d | dense_limit=%d | sparse_limit=%d",
+            top_k, dense_limit, sparse_limit,
+        )
+        t0 = time.perf_counter()
+
         results = self.client.query_points(
             collection_name=self.collection_name,
             prefetch=[
-                # Nhánh 1: Dense vector search (semantic)
+                # Nhánh 1: Semantic search (dense cosine)
                 Prefetch(
                     query=query_dense,
                     using=DENSE_VECTOR_NAME,
-                    limit=top_k,
+                    limit=dense_limit,
                 ),
-                # Nhánh 2: Sparse BM25 search (keyword)
+                # Nhánh 2: Keyword seach (sparse BM25)
                 Prefetch(
                     query=query_sparse,
                     using=SPARSE_VECTOR_NAME,
-                    limit=top_k,
+                    limit=sparse_limit,
                 ),
             ],
-            # Kết hợp 2 nhánh bằng RRF
+            # Qdrant native RRF: rank từ 2 nhánh, không phụ thuộc score scale
             query=FusionQuery(fusion=Fusion.RRF),
             limit=top_k,
+            score_threshold=score_threshold,
             with_payload=True,
         )
 
+        logger.info(
+            "Hybrid search → %d results | %.3fs",
+            len(results.points), time.perf_counter() - t0,
+        )
         return [
             {
                 "text": point.payload.get("text", ""),
@@ -233,7 +282,7 @@ class QdrantVectorStore:
         Xóa collection hiện tại (cẩn thận khi dùng).
         """
         self.client.delete_collection(self.collection_name)
-        print(f"Deleted collection: '{self.collection_name}'")
+        logger.warning("Deleted collection: '%s'", self.collection_name)
 
     def recreate_collection(self):
         """
