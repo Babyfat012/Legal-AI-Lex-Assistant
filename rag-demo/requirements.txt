@@ -5,16 +5,10 @@ pydantic
 
 # LLM & Embedding
 openai
-langchain-openai
-langchain-core
 langchain-text-splitters
 
 # Vector Store
 qdrant-client
-numpy
-
-# BM25
-rank-bm25
 
 # Document Processing
 markitdown[all]
