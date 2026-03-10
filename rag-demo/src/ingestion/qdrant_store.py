@@ -322,7 +322,7 @@ class QdrantVectorStore:
                 "text": point.payload.get("text", ""),
                 "score": point.score,
                 "metadata": {
-                    k: v for k, v in point.payload.items()
+                    k: v for k, v in point.payload.items() if k != "text"
                 },
             }
             for point in results.points

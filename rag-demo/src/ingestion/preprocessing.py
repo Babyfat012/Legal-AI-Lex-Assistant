@@ -204,12 +204,8 @@ class MarkdownConverter:
             2. Chuẩn hóa từng dòng thành Markdown heading
             3. Dọn dẹp khoảng trắng thừa
         """
-        # Bước 0: làm sạch artifacts PDF (null bytes, v.v.) TRƯỚC KHI xử lý
         text = self._clean_raw_text(text)
-
         lines = text.split("\n")
-
-        # Bước 1: Gộp tiêu đề bị ngắt quãng thành 2 dòng
         lines = self._merge_broken_headings(lines)
 
         processed_lines = []
@@ -217,7 +213,7 @@ class MarkdownConverter:
             stripped = line.strip()
             if not stripped:
                 processed_lines.append("")
-                continue  # FIX: trước đây thiếu continue, gây ra dòng trống bị nhân đôi
+                continue
 
             processed_line = self._normalize_legal_heading(stripped)
             processed_lines.append(processed_line)

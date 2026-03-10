@@ -10,11 +10,18 @@ class EmbeddingService:
     EmbeddingService: sử dụng OpenAI text-embedding-3-small
     """
 
+    # Dimension mapping — cập nhật khi thêm model mới
+    _DIMENSION_MAP: dict[str, int] = {
+        "text-embedding-3-small": 1536,
+        "text-embedding-3-large": 3072,
+        "text-embedding-ada-002": 1536,
+    }
+
     def __init__(
-            self, 
-            model: str = "text-embedding-3-small",
-            api_key: str = None,
-        ):
+        self,
+        model: str = "text-embedding-3-small",
+        api_key: str = None,
+    ):
         """
         Args:
             model: Tên model embedding của OpenAI
@@ -22,22 +29,12 @@ class EmbeddingService:
         """
         self.model = model
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
-
-        # Dimension mapping cho các model embedding phổ biến
-        self._dimension = {
-            "text-embedding-3-small": 1536,
-            "text-embedding-3-large": 3072,
-            "text-embedding-ada-002": 1536,
-        }
-        
         logger.info("EmbeddingService initialized | model=%s | dim=%d", model, self.dimension)
-
-        
 
     @property
     def dimension(self) -> int:
         """Trả về dimension của embedding vector cho model hiện tại."""
-        return self._dimension.get(self.model, 1536)  # Mặc định 1536 nếu model không có trong mapping
+        return self._DIMENSION_MAP.get(self.model, 1536)
     
     def embed_text(self, text: str) -> list[float]:
         """
@@ -100,5 +97,3 @@ class EmbeddingService:
             list[float]: Query embedding vector
         """
         return self.embed_text(query)
-    
-    

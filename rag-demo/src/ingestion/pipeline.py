@@ -1,6 +1,5 @@
 import os
 import time
-from pathlib import Path
 from ingestion.loading import DocumentLoader
 from ingestion.chunking import TextChunker
 from ingestion.qdrant_store import QdrantVectorStore
@@ -98,20 +97,27 @@ class IngestionPipeline:
         chunks_texts = [chunk.text for chunk in chunks]
         
         # 3. FIT BM25 + ENCODE SPARSE
-        logger.info("[3/5] BM25 — Fitting vocabulary + encoding sparse vectors...")
+        # QUAN TRỌNG: Chỉ fit lần đầu tiên khi chưa có vocab.
+        # Nếu đã có vocab (load từ file), KHÔNG fit lại để tránh:
+        #   - IDF thay đổi → sparse vectors cũ trong Qdrant bị lỗi thời
+        #   - vocab index dịch chuyển → vectors cũ map sai index
         t3 = time.perf_counter()
-        self.bm25_encoder.fit(chunks_texts)
+        if not self.bm25_encoder._fitted:
+            logger.info("[3/5] BM25 — Fitting vocabulary on new corpus (%d chunks)...", len(chunks_texts))
+            self.bm25_encoder.fit(chunks_texts)
+        else:
+            logger.info("[3/5] BM25 — Using existing vocab (frozen) | vocab_size=%d", len(self.bm25_encoder.vocab))
         sparse_embeddings = self.bm25_encoder.encode_documents(chunks_texts)
         logger.info("[3/5] BM25 done | %d sparse vectors | %.2fs", len(sparse_embeddings), time.perf_counter() - t3)
 
         
-        # === 3. EMBED (OpenAI text-embedding-3-small) ===
+        # === 4. EMBED (OpenAI text-embedding-3-small) ===
         logger.info("[4/5] EMBED — Dense encoding with %s...", self.embedding_service.model)
         t4 = time.perf_counter()
         dense_embeddings = self.embedding_service.embed_documents(chunks_texts)
         logger.info("[4/5] EMBED done | %d vectors | dim=%d | %.2fs", len(dense_embeddings), len(dense_embeddings[0]), time.perf_counter() - t4)
 
-        # === 4. STORE (Save to Qdrant) ===
+        # === 5. STORE (Save to Qdrant) ===
         logger.info("[5/5] STORE — Saving to Qdrant '%s'...", self.vector_store.collection_name)
         t5 = time.perf_counter()
         stored_count = self.vector_store.store_chunks(
@@ -142,22 +148,3 @@ class IngestionPipeline:
         logger.info("=" * 55)
 
         return summary
-    
-    def search(self, query: str, top_k: int = 5) -> list[dict]:
-        """
-        Tìm kiếm hybrid: encode query (dense + sparse) → hybrid_search Qdrant.
-
-        Args:
-            query: Câu hỏi tìm kiếm
-            top_k: Số kết quả trả về
-
-        Returns:
-            list[dict]: Kết quả gồm text, score, metadata
-        """
-        logger.info("Pipeline search | query: %.80s | top_k=%d", query, top_k)
-        query_dense = self.embedding_service.embed_query(query)
-        query_sparse = self.bm25_encoder.encode_query(query)
-        results = self.vector_store.hybrid_search(query_dense, query_sparse, top_k=top_k)
-        logger.info("Pipeline search → %d results", len(results))
-        return results
-    

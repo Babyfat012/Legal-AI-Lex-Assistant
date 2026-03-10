@@ -34,9 +34,9 @@ class DocumentLoader:
 
     SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".doc"}
 
-    DEFAULT_LARGE_FILE_THRESHOLD_MB: float = 10.0   # > 10 MB → streaming
-    DEFAULT_PAGES_PER_BATCH: int = 20               # số trang / batch
-    DEFAULT_BATCH_OVERLAP: int = 2                  # số trang carry-over giữa các batch
+    DEFAULT_LARGE_FILE_THRESHOLD_MB: float = 10.0
+    DEFAULT_PAGES_PER_BATCH: int = 20               
+    DEFAULT_BATCH_OVERLAP: int = 2  
 
     def __init__(
         self,
@@ -61,7 +61,7 @@ class DocumentLoader:
         self.large_file_threshold_mb = large_file_threshold_mb
         self.pages_per_batch = pages_per_batch
         self.batch_overlap = batch_overlap
-        self._converter = None  # lazy init, chỉ tạo khi cần
+        self._converter = None
 
     @property
     def converter(self):
@@ -235,13 +235,11 @@ class DocumentLoader:
         for batch_start in range(0, total_pages, self.pages_per_batch):
             batch_end = min(batch_start + self.pages_per_batch, total_pages)
 
-            # Trích xuất text từng trang trong batch
             page_texts: list[str] = []
             for page_idx in range(batch_start, batch_end):
                 page_text = reader.pages[page_idx].extract_text() or ""
                 page_texts.append(page_text)
 
-            # Batch Overlap: prepend carry-over để bổ sung ngữ cảnh từ batch trước
             new_text = "\n\n".join(page_texts)
             has_carry = bool(carry_over_text)
             raw_text = (carry_over_text + "\n\n" + new_text) if carry_over_text else new_text

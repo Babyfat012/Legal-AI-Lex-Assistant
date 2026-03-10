@@ -1,6 +1,5 @@
 import os
 import time
-import traceback
 from fastapi import APIRouter, HTTPException, Depends
 from functools import lru_cache
 
@@ -24,36 +23,36 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-# Base dir = src/
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# --- Dependency: Services (singleton via lru_cache) ---
+# Đường dẫn tuyệt đối tới BM25 vocab — dùng chung cho pipeline và retriever
+_BM25_VOCAB_PATH: str = os.getenv(
+    "BM25_VOCAB_PATH",
+    os.path.join(BASE_DIR, "data", "bm25_vocab.json"),
+)
+
+
+# --- Dependency injection (singleton via lru_cache) ---
+
 @lru_cache(maxsize=1)
 def get_embedding_service() -> EmbeddingService:
     return EmbeddingService()
 
 
-
 @lru_cache(maxsize=1)
 def get_bm25_encoder() -> BM25Encoder:
-    bm25_path = os.getenv(
-        "BM25_VOCAB_PATH",
-        os.path.join(BASE_DIR, "data", "bm25_vocab.json"),
-        )
-    encoder = BM25Encoder(vocab_path=bm25_path)
-    # Load vocab nếu đã fit trước đó
-    if os.path.exists(bm25_path):
-        encoder.load(bm25_path)
-    return encoder
+    # BM25Encoder.__init__ tự động load vocab nếu file đã tồn tại
+    return BM25Encoder(vocab_path=_BM25_VOCAB_PATH)
+
 
 @lru_cache(maxsize=1)
 def get_vector_store() -> QdrantVectorStore:
-    embedding_service = get_embedding_service()
     return QdrantVectorStore(
         collection_name=os.getenv("QDRANT_COLLECTION", "legal_documents"),
-        dimension=embedding_service.dimension,
+        dimension=get_embedding_service().dimension,
         url=os.getenv("QDRANT_URL", "http://localhost:6333"),
     )
+
 
 @lru_cache(maxsize=1)
 def get_retriever() -> Retriever:
@@ -67,21 +66,24 @@ def get_retriever() -> Retriever:
         use_reranker=True,
     )
 
+
 @lru_cache(maxsize=1)
 def get_generator() -> LLMGenerator:
     return LLMGenerator()
+
 
 @lru_cache(maxsize=1)
 def get_query_analyzer() -> QueryAnalyzer:
     return QueryAnalyzer()
 
+
 @lru_cache(maxsize=1)
 def get_pipeline() -> IngestionPipeline:
-    embedding_service = get_embedding_service()
-    bm25_path = os.getenv("BM25_VOCAB_PATH", "data/bm25_vocab.json")
+    # Dùng chung get_bm25_encoder() singleton — pipeline và retriever
+    # cùng trỏ tới 1 object BM25, đảm bảo vocab nhất quán sau khi ingest
     return IngestionPipeline(
-        embedding_service=embedding_service,
-        bm25_encoder=BM25Encoder(vocab_path=bm25_path),
+        embedding_service=get_embedding_service(),
+        bm25_encoder=get_bm25_encoder(),
         vector_store=get_vector_store(),
     )
 
@@ -199,14 +201,11 @@ def chat(
             mode=mode,
             sub_queries=sub_queries,
             hyde_doc=hyde_doc,
-            reasoning_steps=reasoning_steps or None,
+            reasoning_steps=reasoning_steps,
         )
 
-    except RuntimeError as e:
-        logger.error("Runtime error during /chat: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        logger.error("Unexpected error in /chat:\n%s", traceback.format_exc())
+        logger.error("Unexpected error in /chat: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -241,9 +240,6 @@ def ingest(
             source=request.file_path,
             is_directory=request.is_directory,
         )
-
-        # Reload BM25 encoder trong retriever sau khi ingest
-        get_bm25_encoder.cache_clear()
 
         return IngestResponse(
             status=result["status"],

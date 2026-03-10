@@ -1,4 +1,6 @@
 import os
+import re
+import math
 import json
 from pathlib import Path
 from qdrant_client.models import SparseVector
@@ -6,10 +8,14 @@ from core.logger import get_logger
 
 logger = get_logger(__name__)
 
+# BM25 hyperparameters — tách thành hằng số để dễ tune
+_K1: float = 1.5   # kiểm soát ảnh hưởng của TF (tần số xuất hiện)
+_B:  float = 0.75  # kiểm soát ảnh hưởng của độ dài document
+
 
 # ---------------------------------------------------------------------------
 # Vietnamese Legal Stopwords
-# TỚhp các từ xuất hiện ở hầu hết văn bản luật → IDF gần 0, không có giá trị phân biệt.
+# Tập các từ xuất hiện ở hầu hết văn bản luật → IDF gần 0, không có giá trị phân biệt.
 # Kết hợp với min_idf_threshold để loại thêm rác đặc thù ngành (xuất hiện khắp nơi trong corpus).
 # ---------------------------------------------------------------------------
 VIETNAMESE_LEGAL_STOPWORDS: frozenset[str] = frozenset([
@@ -82,6 +88,10 @@ class BM25Encoder:
         self.avg_len: float = 100.0        # avg document length (tokens), được tính trong fit()
         self._fitted = False               # đã fit vocab/idf chưa
 
+        # Auto-load vocab nếu file đã tồn tại — tránh fit lại mỗi lần thêm document
+        if vocab_path and os.path.exists(vocab_path):
+            self.load(vocab_path)
+
     # ------------------------------------------------------------------
     # Tokenization
     # ------------------------------------------------------------------
@@ -103,7 +113,6 @@ class BM25Encoder:
             - Loại bỏ dấu câu và token quá ngắn (< 2 ký tự)
             - Lọc stopwords tĩnh
         """
-        import re
         try:
             from underthesea import word_tokenize
             # format="text" trả về string với cụm từ dùng dấu gạch dưới
@@ -143,8 +152,6 @@ class BM25Encoder:
         Args:
             texts: Toàn bộ corpus dùng để tính IDF
         """
-        import math
-
         logger.info("Fitting BM25 on %d documents...", len(texts))
 
         # Bước 1: Tokenize
@@ -240,10 +247,9 @@ class BM25Encoder:
                 weight = idf_weight
             else:
                 # Document: BM25 TF normalization với avg_len động từ fit()
-                k1, b = 1.5, 0.75
                 tf_norm = (
-                    (count * (k1 + 1))
-                    / (count + k1 * (1 - b + b * len(tokens) / self.avg_len))
+                    (count * (_K1 + 1))
+                    / (count + _K1 * (1 - _B + _B * len(tokens) / self.avg_len))
                 )
                 weight = tf_norm * idf_weight
 
