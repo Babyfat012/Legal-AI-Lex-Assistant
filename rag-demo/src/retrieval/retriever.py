@@ -58,17 +58,10 @@ class Retriever:
         Args:
             texts: Danh sách văn bản cần index
         """
-        if not texts:
-            logger.warning("index_documents called with empty texts list")
-            return
-
-        # 1. Embed tất cả documents (batch)
-        embeddings = self.embedding_service.embed_documents(texts)
-
-        # 2. Lưu vào vector store
-        self.vector_store.add_documents(texts, embeddings)
-
-        logger.info("Indexed %d documents successfully", len(texts))
+        raise NotImplementedError(
+            "index_documents đã được thay thế bởi IngestionPipeline.ingest(). "
+            "Hãy dùng IngestionPipeline để load, chunk, embed và store."
+        )
 
     def retrieve(self, query: str) -> list[dict]:
         """
@@ -257,7 +250,8 @@ class Retriever:
         Returns:
             str: Context string từ các tài liệu liên quan
         """
-        results = self.retrieve(query, top_k)
+        self.final_top_n = top_k
+        results = self.retrieve(query)
 
         if not results:
             return "Không tìm thấy tài liệu liên quan."
