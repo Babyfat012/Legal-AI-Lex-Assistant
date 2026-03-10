@@ -12,7 +12,8 @@ from qdrant_client.models import (
     Prefetch,
     FusionQuery,
     Fusion,
-    ScoredPoint
+    ScoredPoint,
+    PayloadSchemaType,
 )
 from ingestion.chunking import Chunk
 from core.logger import get_logger
@@ -21,6 +22,17 @@ logger = get_logger(__name__)
 
 DENSE_VECTOR_NAME = "dense"
 SPARSE_VECTOR_NAME = "sparse"
+
+# Trường metadata được đánh Payload Index — hỗ trợ filter nhanh khi scale lớn.
+# VD: tìm trong Luật Đất đai → Qdrant chỉ scan index, không full-scan payload.
+PAYLOAD_INDEX_FIELDS: list[tuple[str, PayloadSchemaType]] = [
+    ("luat",       PayloadSchemaType.KEYWORD),   # tên bộ luật
+    ("chuong",     PayloadSchemaType.KEYWORD),   # chương trong luật
+    ("muc",        PayloadSchemaType.KEYWORD),   # mục trong chương
+    ("dieu",       PayloadSchemaType.KEYWORD),   # điều luật
+    ("source",     PayloadSchemaType.KEYWORD),   # đường dẫn file gốc
+    ("chunk_type", PayloadSchemaType.KEYWORD),   # "parent" | "child"
+]
 
 
 class QdrantVectorStore:
@@ -108,10 +120,65 @@ class QdrantVectorStore:
             "Created collection '%s' | dense=%dd + sparse BM25",
             self.collection_name, self.dimension,
         )
+        self._ensure_payload_indexes()
 
     
+    def _ensure_payload_indexes(self):
+        """
+        Tạo Payload Index cho các trường filter phổ biến.
+
+        Idempotent: gọi nhiều lần không lỗi — Qdrant bỏ qua nếu index đã tồn tại.
+
+        Tại sao cần?
+            Không có index: Qdrant phải full-scan toàn bộ payload để lọc.
+            Có index:       O(log n) lookup — nếu user lọc theo Luật Đất đai
+                             trên 1M points, khác biệt rất lớn.
+        """
+        for field_name, field_schema in PAYLOAD_INDEX_FIELDS:
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name=field_name,
+                    field_schema=field_schema,
+                )
+                logger.debug("Payload index ensured: '%s' (%s)", field_name, field_schema)
+            except Exception as exc:
+                # Index đã tồn tại hoặc lỗi không cửp đãn — log và tiếp tục
+                logger.warning(
+                    "Could not create payload index for '%s': %s", field_name, exc
+                )
+        logger.info(
+            "Payload indexes ensured: %s",
+            [f for f, _ in PAYLOAD_INDEX_FIELDS],
+        )
+
+    @staticmethod
+    def _make_point_id(chunk: "Chunk") -> str:
+        """
+        Tạo deterministic UUID từ nội dung chunk.
+
+        Cùng chunk (source + vị trí + nội dung) → cùng ID →
+        Qdrant upsert = UPDATE thay vì INSERT mới → không duplicate.
+
+        Ưu tiên:
+            1. ``chunk_id`` từ ParentChildChunker (ví dụ: "src/luat.pdf::p0::c3")
+               — đã deterministic, dùng trực tiếp.
+            2. Fallback: hash(source + chunk_index + 200 ký tự đầu).
+
+        Returns:
+            str: UUID v5-format (deterministic, valid UUID string).
+        """
+        chunk_id = chunk.metadata.get("chunk_id")
+        if chunk_id:
+            key = chunk_id
+        else:
+            source = chunk.metadata.get("source", "")
+            key = f"{source}::{chunk.chunk_index}::{chunk.text[:200]}"
+
+        return str(uuid.uuid5(uuid.NAMESPACE_OID, key))
+
     def store_chunks(
-            self, 
+            self,
             chunks: list[Chunk],
             dense_embeddings: list[list[float]],
             sparse_embeddings: list[SparseVector],
@@ -136,7 +203,7 @@ class QdrantVectorStore:
         for chunk, dense_vec, sparse_vec in zip(chunks, dense_embeddings, sparse_embeddings):
             points.append(
                 PointStruct(
-                    id=str(uuid.uuid4()),
+                    id=self._make_point_id(chunk),
                     vector={
                         DENSE_VECTOR_NAME: dense_vec,
                         SPARSE_VECTOR_NAME: sparse_vec,
