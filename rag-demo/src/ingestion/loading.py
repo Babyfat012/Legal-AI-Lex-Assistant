@@ -36,12 +36,14 @@ class DocumentLoader:
 
     DEFAULT_LARGE_FILE_THRESHOLD_MB: float = 10.0   # > 10 MB → streaming
     DEFAULT_PAGES_PER_BATCH: int = 20               # số trang / batch
+    DEFAULT_BATCH_OVERLAP: int = 2                  # số trang carry-over giữa các batch
 
     def __init__(
         self,
         converter_backend: str = "markitdown",
         large_file_threshold_mb: float = DEFAULT_LARGE_FILE_THRESHOLD_MB,
         pages_per_batch: int = DEFAULT_PAGES_PER_BATCH,
+        batch_overlap: int = DEFAULT_BATCH_OVERLAP,
     ):
         """
         Args:
@@ -52,10 +54,13 @@ class DocumentLoader:
                 Mặc định: 10.0 MB.
             pages_per_batch: Số trang xử lý mỗi lần trong streaming mode.
                 Giảm giá trị này nếu RAM vẫn bị tràn. Mặc định: 20.
+            batch_overlap: Số trang cuối của batch trước được carry-over sang
+                batch tiếp theo để bổ sung ngữ cảnh liên tục. Mặc định: 2.
         """
         self.converter_backend = converter_backend
         self.large_file_threshold_mb = large_file_threshold_mb
         self.pages_per_batch = pages_per_batch
+        self.batch_overlap = batch_overlap
         self._converter = None  # lazy init, chỉ tạo khi cần
 
     @property
@@ -66,6 +71,22 @@ class DocumentLoader:
             backend = ConverterBackend(self.converter_backend)
             self._converter = MarkdownConverter(backend=backend)
         return self._converter
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _extract_law_name(self, filename: str) -> str:
+        """
+        Trích xuất tên Luật từ tên file để dùng làm metadata ``luat``.
+
+        Ví dụ:
+            ``luat_dan_su_2015.pdf``  → ``"Luật Dân Sự 2015"``
+            ``bo_luat_hinh_su.txt``   → ``"Bộ Luật Hình Sự"``
+        """
+        stem = Path(filename).stem          # bỏ extension
+        law_name = stem.replace("_", " ").replace("-", " ").title()
+        return law_name
 
     # ------------------------------------------------------------------
     # Public API
@@ -103,6 +124,7 @@ class DocumentLoader:
                 text=text,
                 metadata={
                     "source": str(path),
+                    "luat": self._extract_law_name(path.name),
                     "filename": path.name,
                     "file_type": ext,
                     "format": "markdown",
@@ -131,6 +153,7 @@ class DocumentLoader:
             text=text,
             metadata={
                 "source": str(path),
+                "luat": self._extract_law_name(path.name),
                 "filename": path.name,
                 "file_type": ext,
                 "format": "markdown",
@@ -202,6 +225,7 @@ class DocumentLoader:
         total_pages = len(reader.pages)
         batch_count = 0
         yielded_count = 0
+        carry_over_text: str = ""           # Batch Overlap: text carry-over từ batch trước
 
         logger.info(
             "[Loader][Stream] %s | %.1f MB | %d pages | batch_size=%d",
@@ -217,7 +241,17 @@ class DocumentLoader:
                 page_text = reader.pages[page_idx].extract_text() or ""
                 page_texts.append(page_text)
 
-            raw_text = "\n\n".join(page_texts)
+            # Batch Overlap: prepend carry-over để bổ sung ngữ cảnh từ batch trước
+            new_text = "\n\n".join(page_texts)
+            has_carry = bool(carry_over_text)
+            raw_text = (carry_over_text + "\n\n" + new_text) if carry_over_text else new_text
+
+            # Cập nhật carry-over cho batch kế tiếp (giữ N trang cuối)
+            carry_over_text = (
+                "\n\n".join(page_texts[-self.batch_overlap :])
+                if self.batch_overlap > 0 and page_texts
+                else ""
+            )
 
             if not raw_text.strip():
                 logger.debug(
@@ -242,6 +276,9 @@ class DocumentLoader:
                     "total_pages": total_pages,
                     "batch_index": batch_count,
                     "streaming_mode": True,
+                    "luat": self._extract_law_name(path.name),
+                    "has_carry_over": has_carry,
+                    "batch_overlap_pages": self.batch_overlap,
                 },
             )
 
@@ -255,7 +292,7 @@ class DocumentLoader:
 
             # Giải phóng bộ nhớ ngay sau khi yield
             page_texts.clear()
-            del raw_text, processed_text
+            del raw_text, new_text, processed_text
             gc.collect()
 
         logger.info(
