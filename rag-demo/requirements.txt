@@ -15,5 +15,10 @@ pypdf
 markitdown[all]
 docling
 
+# Chunking
+tiktoken       # token-aware splitting (SemanticChunkSplitter)
+numpy          # cosine similarity cho semantic chunking
+underthesea    # Vietnamese word segmentation cho BM25
+
 # Environment
 python-dotenv
