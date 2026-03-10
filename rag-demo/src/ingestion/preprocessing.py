@@ -26,6 +26,8 @@ class MarkdownConverter:
             backend: Engine chuyển đổi ("markitdown" hoặc "docling")
         """
         self.backend = backend
+        self._md_instance = None       # lazy init — khởi tạo 1 lần khi cần
+        self._docling_instance = None  # lazy init — khởi tạo 1 lần khi cần
     
     def convert_file(self, file_path: str, output_path: str = None) -> str:
         """
@@ -118,32 +120,38 @@ class MarkdownConverter:
 
     def _convert_with_markitdown(self, path: Path) -> str:
         """
-        Chuyển đổi file sử dụng backend markitdown
+        Chuyển đổi file sử dụng backend markitdown.
+        Instance được khởi tạo 1 lần duy nhất (lazy init) và tái sử dụng
+        cho mọi lần gọi tiếp theo.
         """
-        try:
-            from markitdown import MarkItDown
-        except ImportError:
-            raise ImportError(
-                "markitdown is not installed. Please install it with `pip install markitdown`"
-            )
-        
-        md = MarkItDown()
-        result = md.convert(str(path))
+        if self._md_instance is None:
+            try:
+                from markitdown import MarkItDown
+            except ImportError:
+                raise ImportError(
+                    "markitdown is not installed. Please install it with `pip install markitdown`"
+                )
+            self._md_instance = MarkItDown()
+
+        result = self._md_instance.convert(str(path))
         return result.text_content
     
     def _convert_with_docling(self, path: Path) -> str:
         """
-        Chuyển đổi file sử dụng backend docling
+        Chuyển đổi file sử dụng backend docling.
+        Instance được khởi tạo 1 lần duy nhất (lazy init) và tái sử dụng
+        cho mọi lần gọi tiếp theo.
         """
-        try:
-            from docling.document_converter import DocumentConverter
-        except ImportError:
-            raise ImportError(
-                "docling is not installed. Please install it with `pip install docling`"
-            )
-        
-        dl = DocumentConverter()
-        result = dl.convert(str(path))
+        if self._docling_instance is None:
+            try:
+                from docling.document_converter import DocumentConverter
+            except ImportError:
+                raise ImportError(
+                    "docling is not installed. Please install it with `pip install docling`"
+                )
+            self._docling_instance = DocumentConverter()
+
+        result = self._docling_instance.convert(str(path))
         return result.document.export_to_markdown()
     
 
