@@ -35,7 +35,7 @@ class IngestionPipeline:
         )
         self.chunker = chunker or TextChunker(chunk_size=1024, chunk_overlap=100)
         self.embedding_service = embedding_service or EmbeddingService()
-        default_bm25_path = os.path.join(BASE_DIR, "data", "bm25_vocab.json"),
+        default_bm25_path = os.path.join(BASE_DIR, "data", "bm25_vocab.json")
 
         self.bm25_encoder = bm25_encoder or BM25Encoder(
             vocab_path=default_bm25_path
