@@ -88,14 +88,18 @@ class Retriever:
             logger.warning("No candidates found — returning empty list")
             return []
 
-        # 3. Rerank nếu cần
+        # 3. Rerank — lấy pool rộng hơn để sau dedup có đủ unique parents
+        rerank_pool_size = min(len(candidates), max(_top_n * 4, 12))
         if _use_reranker and len(candidates) > _top_n:
-            results = self.reranker.rerank(query=query, candidates=candidates, top_n=_top_n)
+            scored = self.reranker.rerank(query=query, candidates=candidates, top_n=rerank_pool_size)
         else:
-            results = candidates[:_top_n]
+            scored = candidates[:rerank_pool_size]
+
+        # 4. Deduplicate theo parent_id → top _top_n Điều luật độc nhất
+        results = self._deduplicate_by_parent(scored, max_parents=_top_n)
 
         logger.info(
-            "Retrieval END → %d results | total=%.2fs",
+            "Retrieval END → %d unique parents | total=%.2fs",
             len(results), time.perf_counter() - t0,
         )
         return results
@@ -209,18 +213,22 @@ class Retriever:
         if not merged:
             return [], sub_queries, hyde_doc
 
-        # 5. Rerank một lần duy nhất với original query
+        # 5. Rerank một lần duy nhất với original query — pool rộng để dedup
+        rerank_pool_size = min(len(merged), max(_top_n * 4, 12))
         if _use_reranker and len(merged) > _top_n:
-            results = self.reranker.rerank(
+            scored = self.reranker.rerank(
                 query=query,
                 candidates=merged,
-                top_n=_top_n,
+                top_n=rerank_pool_size,
             )
         else:
-            results = sorted(merged, key=lambda x: x.get("score", 0), reverse=True)[:_top_n]
+            scored = sorted(merged, key=lambda x: x.get("score", 0), reverse=True)[:rerank_pool_size]
+
+        # Deduplicate theo parent_id → top _top_n Điều luật độc nhất
+        results = self._deduplicate_by_parent(scored, max_parents=_top_n)
 
         logger.info(
-            "Advanced retrieval END → %d results | total=%.2fs",
+            "Advanced retrieval END → %d unique parents | total=%.2fs",
             len(results), time.perf_counter() - t0,
         )
         return results, sub_queries, hyde_doc
@@ -242,7 +250,42 @@ class Retriever:
             return "Không tìm thấy tài liệu liên quan."
 
         context_parts = [
-            f"[{i}] (score: {doc['score']:.4f}) {doc['text']}"
+            f"[{i}] (score: {doc['score']:.4f}) {doc.get('parent_content') or doc['text']}"
             for i, doc in enumerate(results, 1)
         ]
         return "\n\n".join(context_parts)
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _deduplicate_by_parent(self, results: list[dict], max_parents: int) -> list[dict]:
+        """
+        Khử trùng kết quả theo parent_id.
+
+        Nhiều child chunks có thể thuộc cùng một parent (Điều luật).
+        Hàm này giữ child có rerank/score cao nhất đại diện cho mỗi parent,
+        tránh lãng phí token khi cùng parent_content xuất hiện nhiều lần trong prompt.
+
+        Args:
+            results:     List chunks đã rerank (sắp xếp score giảm dần).
+            max_parents: Số unique parents tối đa cần trả về (3–5 là "gold range").
+
+        Returns:
+            list[dict]: Tối đa max_parents items, mỗi item đại diện 1 Điều luật duy nhất.
+        """
+        seen_parents: dict[str, dict] = {}
+        for result in results:
+            meta = result.get("metadata", {})
+            # parent_id như "luat.pdf::p3"; fallback chunk_id nếu không có
+            parent_id = meta.get("parent_id") or meta.get("chunk_id", "")
+            if parent_id not in seen_parents:
+                seen_parents[parent_id] = result
+                if len(seen_parents) >= max_parents:
+                    break
+        unique = list(seen_parents.values())
+        logger.debug(
+            "Dedup parent_id: %d candidates → %d unique parents",
+            len(results), len(unique),
+        )
+        return unique
