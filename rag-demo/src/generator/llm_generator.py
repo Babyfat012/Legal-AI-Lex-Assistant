@@ -21,14 +21,13 @@ Nguyên tắc trả lời:
 5. Không tự suy diễn hoặc thêm thông tin ngoài context.
 """
 
-QUERY_PROMPT_TEMPLATE = """CONTEXT (các đoạn văn bản pháp luật liên quan):
+QUERY_PROMPT_TEMPLATE = """Dưới đây là các Điều luật liên quan để trả lời câu hỏi:
+
 {context}
-
 ---
-
 CÂU HỎI: {query}
 
-Hãy trả lời câu hỏi dựa trên các đoạn văn bản pháp luật ở trên."""
+Lưu ý: Chỉ trả lời dựa trên các Điều luật trên. Nếu không tìm thấy thông tin, hãy nói rõ: "Tôi không tìm thấy thông tin liên quan trong các văn bản pháp luật được cung cấp.\""""
 
 # ---------------------------------------------------------------------------
 # Legal Reasoning prompts (Chain-of-Thought / Legal Syllogism)
@@ -69,29 +68,42 @@ class LLMGenerator:
     """
     Generator: Sinh câu trả lời từ query + retrieved chunks.
 
-    Dùng OpenAI GPT làm LLM với system prompt định nghĩa vai trò Lex.
+    Hỗ trợ 2 model riêng biệt theo routing:
+        simple_model    — gpt-4o-mini: nhanh, rẻ, đủ cho tra cứu thông tin.
+        reasoning_model — gpt-4o (hoặc o3-mini): mạnh hơn, dùng cho tình
+                          huống tranh chấp / Legal Syllogism CoT.
     """
 
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
+        simple_model: str = "gpt-4o-mini",
+        reasoning_model: str = "gpt-4o-mini",
         api_key: str = None,
         temperature: float = 0.1,
         max_tokens: int = 1500,
     ):
-        """Args:
-            model: Tên model OpenAI (ví dụ "gpt-4o-mini")
-            api_key: Khóa API OpenAI (nếu None sẽ dùng biến môi trường OPENAI_API_KEY)
-            temperature: Độ sáng tạo của câu trả lời (thường để thấp cho legal)
-            max_tokens: Số token tối đa cho câu trả lời
         """
-        self.model = model
+        Args:
+            simple_model:    Model cho câu hỏi đơn giản (tra cứu, định nghĩa).
+                             Mặc định: "gpt-4o-mini" (nhanh, rẻ).
+            reasoning_model: Model cho câu hỏi phức tạp (tình huống, tranh chấp).
+                             Mặc định: "gpt-4o-mini". Nâng lên "gpt-4o" hoặc
+                             "o3-mini" để tăng chất lượng phân tích pháp lý.
+            api_key:         OpenAI API key. None = đọc từ OPENAI_API_KEY.
+            temperature:     Độ sáng tạo (thấp cho legal, mặc định 0.1).
+            max_tokens:      Token tối đa cho câu trả lời.
+        """
+        self.simple_model = simple_model
+        self.reasoning_model = reasoning_model
+        # Backward-compat: self.model trỏ tới simple_model
+        self.model = simple_model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
         logger.info(
-            "LLMGenerator initialized | model=%s | max_tokens=%d | temperature=%.1f",
-            model, max_tokens, temperature,
+            "LLMGenerator initialized | simple_model=%s | reasoning_model=%s"
+            " | max_tokens=%d | temperature=%.1f",
+            simple_model, reasoning_model, max_tokens, temperature,
         )
 
     def generate(self, query: str, context_chunks: list[dict]) -> str:
@@ -106,7 +118,10 @@ class LLMGenerator:
         Returns:
             str: Câu trả lời từ LLM
         """
-        logger.info("Generating answer | context_chunks=%d | query: %.80s", len(context_chunks), query)
+        logger.info(
+            "Generating answer | model=%s | context_chunks=%d | query: %.80s",
+            self.simple_model, len(context_chunks), query,
+        )
         t0 = time.perf_counter()
 
         # Format context từ các chunks
@@ -119,7 +134,7 @@ class LLMGenerator:
         )
 
         response = self.client.chat.completions.create(
-            model=self.model,
+            model=self.simple_model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -141,12 +156,14 @@ class LLMGenerator:
         """
         Format danh sách chunks thành chuỗi context cho LLM.
 
-        Mỗi chunk được format với metadata (Luật, Chương, Điều) để LLM
+        Ưu tiên ``parent_content`` (toàn bộ Điều luật) thay vì child chunk
+        để LLM có đủ ngữ cảnh cho generation chính xác.
+        Mỗi Điều được đánh số và gắn header [Luật - Chương - Điều] để LLM
         có thể trích dẫn chính xác nguồn.
         """
         if not chunks:
             return "Không có thông tin liên quan"
-        
+
         parts = []
         for i, chunk in enumerate(chunks, 1):
             metadata = chunk.get("metadata", {})
@@ -154,13 +171,16 @@ class LLMGenerator:
             chuong = metadata.get("chuong", "")
             dieu = metadata.get("dieu", "")
 
-            # Header cho mỗi chunk
+            # Header cho mỗi Điều luật
             header_parts = [p for p in [luat, chuong, dieu] if p]
-            header = " | ".join(header_parts) if header_parts else f"Đoạn {i}"
+            header = " - ".join(header_parts) if header_parts else f"Văn bản {i}"
 
-            parts.append(f"[{i}] {header}\n{chunk.get('text', '')}")
+            # Ưu tiên parent_content (đủ Điều luật) để LLM có đủ ngữ cảnh
+            content = chunk.get("parent_content") or chunk.get("text", "")
 
-        return "\n\n---\n\n".join(parts)
+            parts.append(f"[Văn bản {i}: {header}]\nNội dung: {content}")
+
+        return "\n---\n".join(parts)
 
     # ------------------------------------------------------------------
     # Legal Reasoning (Chain-of-Thought / Legal Syllogism)
@@ -193,8 +213,8 @@ class LLMGenerator:
                 - reasoning_dict: Dict cấu trúc CoT để frontend parse.
         """
         logger.info(
-            "Generating reasoning answer | chunks=%d | query: %.80s",
-            len(context_chunks), query,
+            "Generating reasoning answer | model=%s | chunks=%d | query: %.80s",
+            self.reasoning_model, len(context_chunks), query,
         )
         t0 = time.perf_counter()
         context = self._format_context(context_chunks)
@@ -202,7 +222,7 @@ class LLMGenerator:
 
         try:
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=self.reasoning_model,
                 messages=[
                     {"role": "system", "content": _REASONING_SYSTEM},
                     {"role": "user", "content": user_prompt},
