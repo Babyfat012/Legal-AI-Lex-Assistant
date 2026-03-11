@@ -209,9 +209,10 @@ class QdrantVectorStore:
                         SPARSE_VECTOR_NAME: sparse_vec,
                     },
                     payload={
-                        "text": chunk.text,
+                        "content": chunk.text,
+                        "parent_content": chunk.metadata.get("parent_content", ""),
                         "chunk_index": chunk.chunk_index,
-                        **chunk.metadata,
+                        **{k: v for k, v in chunk.metadata.items() if k != "parent_content"},
                     },
                 )
             )
@@ -296,10 +297,12 @@ class QdrantVectorStore:
         )
         return [
             {
-                "text": point.payload.get("text", ""),
+                "text": point.payload.get("content", ""),
+                "parent_content": point.payload.get("parent_content", ""),
                 "score": point.score,
                 "metadata": {
-                    k: v for k, v in point.payload.items() if k != "text"
+                    k: v for k, v in point.payload.items()
+                    if k not in ("content", "parent_content")
                 },
             }
             for point in results.points
@@ -319,10 +322,12 @@ class QdrantVectorStore:
         )
         return [
             {
-                "text": point.payload.get("text", ""),
+                "text": point.payload.get("content", ""),
+                "parent_content": point.payload.get("parent_content", ""),
                 "score": point.score,
                 "metadata": {
-                    k: v for k, v in point.payload.items() if k != "text"
+                    k: v for k, v in point.payload.items()
+                    if k not in ("content", "parent_content")
                 },
             }
             for point in results.points
