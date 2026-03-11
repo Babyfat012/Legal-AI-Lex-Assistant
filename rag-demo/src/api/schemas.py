@@ -25,7 +25,8 @@ class IngestRequest(BaseModel):
 
 # --- Response Schemas ---
 class SourceChunk(BaseModel):
-    text: str = Field(..., description="Nội dung chunk")
+    text: str = Field(..., description="Nội dung child chunk (đoạn match với query)")
+    parent_content: Optional[str] = Field(None, description="Nội dung đầy đủ của Điều luật (parent chunk — dùng cho LLM generation)")
     score: float = Field(..., description="RRF score từ hybrid search")
     rerank_score: Optional[float] = Field(None, description="Điểm rerank từ LLM (nếu có)")
     luat: Optional[str] = Field(None, description="Tên văn bản luật (nếu có)")
