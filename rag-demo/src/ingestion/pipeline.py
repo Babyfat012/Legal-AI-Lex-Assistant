@@ -1,7 +1,8 @@
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from ingestion.loading import DocumentLoader
-from ingestion.chunking import TextChunker
+from ingestion.chunking import ParentChildChunker
 from ingestion.qdrant_store import QdrantVectorStore
 from embedding.embedding import EmbeddingService
 from embedding.bm25_en import BM25Encoder
@@ -21,7 +22,7 @@ class IngestionPipeline:
     def __init__(
         self,
         loader: DocumentLoader = None,
-        chunker: TextChunker = None,
+        chunker: ParentChildChunker = None,
         embedding_service: EmbeddingService = None,
         bm25_encoder: BM25Encoder = None,
         vector_store: QdrantVectorStore = None,
@@ -32,7 +33,10 @@ class IngestionPipeline:
             large_file_threshold_mb=large_file_threshold_mb,
             pages_per_batch=pages_per_batch,
         )
-        self.chunker = chunker or TextChunker(chunk_size=1024, chunk_overlap=100)
+        self.chunker = chunker or ParentChildChunker(
+            parent_max_tokens=512,
+            child_max_tokens=128,
+        )
         self.embedding_service = embedding_service or EmbeddingService()
         default_bm25_path = os.path.join(BASE_DIR, "data", "bm25_vocab.json")
 
@@ -79,43 +83,49 @@ class IngestionPipeline:
             logger.error("No documents loaded from source: %s", source)
             return {"status": "error", "message": "No documents loaded from source."}
         
-        # === 2. CHUNK (Recursive splitting by legal structure) ===
-        logger.info("[2/5] CHUNK — Splitting by Chương > Điều > Khoản...")
+        # === 2. CHUNK (Parent-Child) ===
+        logger.info("[2/5] CHUNK — Parent-Child chunking...")
         t2 = time.perf_counter()
-        chunks = self.chunker.chunk_documents(documents)
-        logger.info("[2/5] CHUNK done | %d chunks | %.2fs", len(chunks), time.perf_counter() - t2)
-
-        # QC stats từ ChunkValidator
-        qc_rejected = self.chunker.validator.rejected_count
-        qc_total = self.chunker.validator.total_count
-        if qc_rejected > 0:
-            logger.warning(
-                "[QC] Đã reject %d/%d chunks do thiếu metadata (chuong/dieu).",
-                qc_rejected, qc_total,
-            )
+        chunk_result = self.chunker.chunk_documents(documents)
+        chunks = chunk_result.children  # chỉ index children
+        logger.info(
+            "[2/5] CHUNK done | %d parents | %d children(indexed) | %.2fs",
+            len(chunk_result.parents),
+            len(chunks),
+            time.perf_counter() - t2,
+        )
 
         chunks_texts = [chunk.text for chunk in chunks]
         
-        # 3. FIT BM25 + ENCODE SPARSE
-        # QUAN TRỌNG: Chỉ fit lần đầu tiên khi chưa có vocab.
-        # Nếu đã có vocab (load từ file), KHÔNG fit lại để tránh:
-        #   - IDF thay đổi → sparse vectors cũ trong Qdrant bị lỗi thời
-        #   - vocab index dịch chuyển → vectors cũ map sai index
-        t3 = time.perf_counter()
-        if not self.bm25_encoder._fitted:
-            logger.info("[3/5] BM25 — Fitting vocabulary on new corpus (%d chunks)...", len(chunks_texts))
-            self.bm25_encoder.fit(chunks_texts)
-        else:
-            logger.info("[3/5] BM25 — Using existing vocab (frozen) | vocab_size=%d", len(self.bm25_encoder.vocab))
-        sparse_embeddings = self.bm25_encoder.encode_documents(chunks_texts)
-        logger.info("[3/5] BM25 done | %d sparse vectors | %.2fs", len(sparse_embeddings), time.perf_counter() - t3)
+        # === 3+4. BM25 SPARSE + DENSE EMBEDDING (song song) ===
+        # Hai bước hoàn toàn độc lập nhau → chạy concurrent bằng ThreadPoolExecutor
+        # Tiết kiệm thời gian bằng cách overlap I/O (OpenAI API) với CPU (BM25 encode)
+        t34 = time.perf_counter()
 
-        
-        # === 4. EMBED (OpenAI text-embedding-3-small) ===
-        logger.info("[4/5] EMBED — Dense encoding with %s...", self.embedding_service.model)
-        t4 = time.perf_counter()
-        dense_embeddings = self.embedding_service.embed_documents(chunks_texts)
-        logger.info("[4/5] EMBED done | %d vectors | dim=%d | %.2fs", len(dense_embeddings), len(dense_embeddings[0]), time.perf_counter() - t4)
+        def _fit_and_encode_sparse() -> list:
+            if not self.bm25_encoder._fitted:
+                logger.info("[3/5] BM25 — Fitting vocabulary on new corpus (%d chunks)...", len(chunks_texts))
+                self.bm25_encoder.fit(chunks_texts)
+            else:
+                logger.info("[3/5] BM25 — Using existing vocab (frozen) | vocab_size=%d", len(self.bm25_encoder.vocab))
+            return self.bm25_encoder.encode_documents(chunks_texts)
+
+        def _encode_dense() -> list:
+            logger.info("[4/5] EMBED — Dense encoding with %s...", self.embedding_service.model)
+            return self.embedding_service.embed_documents(chunks_texts)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            sparse_future = executor.submit(_fit_and_encode_sparse)
+            dense_future  = executor.submit(_encode_dense)
+            sparse_embeddings = sparse_future.result()
+            dense_embeddings  = dense_future.result()
+
+        logger.info(
+            "[3+4/5] BM25 + EMBED done | sparse=%d | dense=%d | dim=%d | %.2fs",
+            len(sparse_embeddings), len(dense_embeddings),
+            len(dense_embeddings[0]) if dense_embeddings else 0,
+            time.perf_counter() - t34,
+        )
 
         # === 5. STORE (Save to Qdrant) ===
         logger.info("[5/5] STORE — Saving to Qdrant '%s'...", self.vector_store.collection_name)
@@ -133,8 +143,8 @@ class IngestionPipeline:
             "status": "success",
             "load_mode": load_mode,
             "documents_loaded": len(documents),
+            "parents_created": len(chunk_result.parents),
             "chunks_created": len(chunks),
-            "chunks_rejected_by_qc": qc_rejected,
             "dense_embeddings": len(dense_embeddings),
             "sparse_embeddings": len(sparse_embeddings),
             "chunks_stored": stored_count,
