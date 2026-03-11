@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 from core.logger import get_logger
 
@@ -52,37 +53,54 @@ class EmbeddingService:
         )
         return response.data[0].embedding
 
-    def embed_documents(self, texts: list[str], batch_size: int = 100) -> list[list[float]]:
+    def embed_documents(self, texts: list[str], batch_size: int = 100, max_workers: int = 6) -> list[list[float]]:
         """
-        Embed nhiều đoạn text thành vectors
-        Tự động chia batch để trách vượt rate limit
+        Embed nhiều đoạn text thành vectors.
+        Gửi các batch song song thay vì tuần tự → giảm latency đáng kể
+        khi có nhiều batch (I/O-bound, ThreadPoolExecutor phù hợp).
 
         Args:
-            texts: Danh sách chuỗi văn bản cần embed.
-            batch_size: Số text mỗi batch gửi lên API
+            texts:       Danh sách chuỗi văn bản cần embed.
+            batch_size:  Số text mỗi batch gửi lên API. Mặc định 100.
+            max_workers: Số thread song song. Mặc định 6 (cân bằng tốc độ / rate-limit).
 
         Returns:
-            list[list[float]]: Danh sách vector embedding tương ứng với mỗi đoạn text.
+            list[list[float]]: Danh sách vector embedding theo đúng thứ tự input.
         """
-        all_embeddings = []
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
+        if not texts:
+            return []
 
-            response = self.client.embeddings.create(
-                input=batch,
-                model=self.model,
-            )
+        batches = [texts[i: i + batch_size] for i in range(0, len(texts), batch_size)]
+        n_batches = len(batches)
+        results: list[list[list[float]] | None] = [None] * n_batches
 
-            # Sort by index để đảm bảo thứ tự đúng
-            batch_embeddings = [item.embedding for item in sorted(
-                response.data, key=lambda x: x.index
-            )]
-            all_embeddings.extend(batch_embeddings)
+        def _embed_batch(batch_idx: int, batch: list[str]) -> tuple[int, list[list[float]]]:
+            response = self.client.embeddings.create(input=batch, model=self.model)
+            embeddings = [item.embedding for item in sorted(response.data, key=lambda x: x.index)]
+            logger.debug("Embedded batch %d/%d | %d texts", batch_idx + 1, n_batches, len(batch))
+            return batch_idx, embeddings
 
-            logger.debug("Embedded batch %d/%d | %d texts",
-                         i // batch_size + 1, -(-len(texts) // batch_size), len(batch))
-        
-        logger.info("Embedding complete | %d vectors | dim=%d", len(all_embeddings), len(all_embeddings[0]) if all_embeddings else 0)
+        workers = min(max_workers, n_batches)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(_embed_batch, idx, batch): idx
+                for idx, batch in enumerate(batches)
+            }
+            for future in as_completed(futures):
+                batch_idx, embeddings = future.result()
+                results[batch_idx] = embeddings
+
+        all_embeddings: list[list[float]] = []
+        for batch_embeddings in results:
+            all_embeddings.extend(batch_embeddings)  # type: ignore[arg-type]
+
+        logger.info(
+            "Embedding complete | %d vectors | dim=%d | batches=%d | workers=%d",
+            len(all_embeddings),
+            len(all_embeddings[0]) if all_embeddings else 0,
+            n_batches,
+            workers,
+        )
         return all_embeddings
     
     def embed_query(self, query: str) -> list[float]:
