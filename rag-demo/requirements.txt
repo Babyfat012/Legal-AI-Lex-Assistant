@@ -22,3 +22,7 @@ underthesea    # Vietnamese word segmentation cho BM25
 
 # Environment
 python-dotenv
+
+# Chainlit demo UI
+chainlit
+httpx
