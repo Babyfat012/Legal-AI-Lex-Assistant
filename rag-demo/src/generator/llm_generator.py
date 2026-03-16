@@ -10,24 +10,75 @@ logger = get_logger(__name__)
 # Standard RAG prompts
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """
-Bạn là Lex — trợ lý pháp lý AI chuyên về luật Việt Nam.
+def _load_system_prompt() -> str:
+    """Load system prompt from rag-demo/prompt_lex_system.md if available.
 
-Nguyên tắc trả lời:
-1. Chỉ trả lời dựa trên các đoạn văn bản luật được cung cấp trong phần CONTEXT.
-2. Nếu context không đủ thông tin, hãy nói rõ: "Tôi không tìm thấy thông tin liên quan trong các văn bản pháp luật được cung cấp."
-3. Trích dẫn cụ thể Điều/Khoản/Điểm khi trả lời.
-4. Dùng ngôn ngữ rõ ràng, dễ hiểu. Tránh thuật ngữ kỹ thuật không cần thiết.
-5. Không tự suy diễn hoặc thêm thông tin ngoài context.
-"""
+    Falls back to a minimal built-in prompt when the file is missing or unreadable.
+    """
+    base = os.path.dirname(__file__)
+    prompt_path = os.path.normpath(os.path.join(base, '..', '..', 'prompt_lex_system.md'))
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as fh:
+            content = fh.read()
+        logger.info("Loaded system prompt from %s", prompt_path)
+        return content
+    except Exception as exc:
+        logger.warning("Failed to load system prompt from %s, using fallback prompt: %s", prompt_path, exc)
+        # Fallback minimal prompt
+        return (
+            "Bạn là Lex — trợ lý pháp lý AI chuyên về luật Việt Nam.\n\n"
+            "Nguyên tắc trả lời:\n"
+            "1. Chỉ trả lời dựa trên các đoạn văn bản luật được cung cấp trong phần CONTEXT.\n"
+            "2. Nếu context không đủ thông tin, hãy nói rõ: \"Tôi không tìm thấy thông tin liên quan trong các văn bản pháp luật được cung cấp.\"\n"
+            "3. Trích dẫn cụ thể Điều/Khoản/Điểm khi trả lời.\n"
+            "4. Dùng ngôn ngữ rõ ràng, dễ hiểu. Tránh thuật ngữ kỹ thuật không cần thiết.\n"
+            "5. Không tự suy diễn hoặc thêm thông tin ngoài context."
+        )
 
-QUERY_PROMPT_TEMPLATE = """Dưới đây là các Điều luật liên quan để trả lời câu hỏi:
+SYSTEM_PROMPT = _load_system_prompt()
+
+QUERY_PROMPT_TEMPLATE = """
+Dưới đây là các Điều luật liên quan để trả lời câu hỏi:
 
 {context}
 ---
 CÂU HỎI: {query}
 
-Lưu ý: Chỉ trả lời dựa trên các Điều luật trên. Nếu không tìm thấy thông tin, hãy nói rõ: "Tôi không tìm thấy thông tin liên quan trong các văn bản pháp luật được cung cấp.\""""
+Lưu ý: Chỉ trả lời dựa trên các Điều luật trên. Nếu không tìm thấy thông tin, hãy nói rõ: "Tôi không tìm thấy thông tin liên quan trong các văn bản pháp luật được cung cấp.\"
+"""
+
+# Two-stage pipeline templates
+CONDENSE_SYSTEM = """
+Bạn là một chuyên gia phân tích truy vấn pháp lý. 
+Nhiệm vụ của bạn là tạo ra một câu truy vấn tìm kiếm độc lập (Standalone Query).
+QUY TẮC:
+1. Nếu người dùng dùng đại từ thay thế (ví dụ: 'hành vi này', 'việc đó', 'tái phạm'), bạn phải thay bằng thực thể pháp lý cụ thể từ lịch sử (ví dụ: 'vi phạm nồng độ cồn xe máy').
+2. KHÔNG được thay đổi lĩnh vực pháp lý. Nếu đang nói về Giao thông, câu truy vấn phải chứa từ khóa Giao thông.
+3. Tuyệt đối không tự trả lời câu hỏi, chỉ được viết lại câu hỏi.
+4. Trả về DUY NHẤT 1 câu hỏi standalone, không giải thích, không thêm thông tin ngoài lịch sử.
+"""
+
+CONDENSE_USER = """
+Chat History:
+{chat_history}
+
+Follow-up Input: {question}
+
+Standalone Question:
+"""
+
+PIPELINE_PROMPT_TEMPLATE = """
+Dưới đây là các Điều luật liên quan để trả lời câu hỏi:
+
+{context}
+---
+CHAT HISTORY:
+{chat_history}
+---
+CÂU HỎI (đã làm rõ): {standalone_question}
+
+Lưu ý: Chỉ trả lời dựa trên các Điều luật trên. Nếu không tìm thấy thông tin, hãy nói rõ: "Tôi không tìm thấy thông tin liên quan trong các văn bản pháp luật được cung cấp."
+"""
 
 # ---------------------------------------------------------------------------
 # Legal Reasoning prompts (Chain-of-Thought / Legal Syllogism)
@@ -95,7 +146,6 @@ class LLMGenerator:
         """
         self.simple_model = simple_model
         self.reasoning_model = reasoning_model
-        # Backward-compat: self.model trỏ tới simple_model
         self.model = simple_model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -151,6 +201,154 @@ class LLMGenerator:
             usage.total_tokens,
         )
         return response.choices[0].message.content.strip()
+
+    def condense_question(self, chat_history: str, question: str) -> str:
+        """Rewrite follow-up `question` into a standalone question using minimal context.
+
+        Returns a single-line standalone question. On failure, returns the original `question`.
+        """
+        try:
+            # Prepare / truncate chat history to avoid sending excessively long context
+            prepared_history = self.prepare_chat_history(chat_history)
+            user_prompt = CONDENSE_USER.format(chat_history=prepared_history or "", question=question)
+            resp = self.client.chat.completions.create(
+                model=self.reasoning_model,  # Use reasoning_model for better accuracy
+                messages=[
+                    {"role": "system", "content": CONDENSE_SYSTEM},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.0,
+                max_tokens=128,
+            )
+            
+            standalone = resp.choices[0].message.content.strip()
+            # Keep single-line, trimmed
+            standalone = " ".join(standalone.split())
+            logger.info("Condensed question: %s", standalone)
+            return standalone or question
+        except Exception as exc:
+            logger.warning("Condense question failed, returning original: %s", exc)
+            return question
+
+    def prepare_chat_history(self, chat_history, max_turns: int = 3, max_chars: int = 1200) -> str:
+        """Prepare chat history for prompts.
+
+        - Accepts `chat_history` as a string or list of strings (turns).
+        - Keeps only the last `max_turns` turns, joining with newlines.
+        - If resulting string exceeds `max_chars`, attempt to summarize it using LLM.
+        - Adjusted to use max_turns=7 and consider token count for truncation.
+        """
+        if not chat_history:
+            return ""
+
+        # Normalize to list of turns
+        if isinstance(chat_history, list):
+            turns = chat_history[-7:]  # Increased max_turns to 7
+            hist = "\n".join(turns)
+        elif isinstance(chat_history, str):
+            # split heuristically by newline or sentence
+            lines = [ln.strip() for ln in chat_history.splitlines() if ln.strip()]
+            hist = "\n".join(lines[-7:]) if len(lines) > 7 else "\n".join(lines)
+        else:
+            hist = str(chat_history)
+
+        # Check token count instead of fixed max_chars
+        token_count = len(hist.split())
+        if token_count <= 1200:
+            return hist
+
+        # Summarize long history to keep important legal entities
+        try:
+            summary = self.summarize_chat_history(hist)
+            logger.info("Chat history summarized (tokens %d -> %d)", token_count, len(summary.split()))
+            return summary
+        except Exception as exc:
+            logger.warning("Failed to summarize chat history, truncating: %s", exc)
+            return hist[-max_chars:]
+
+    def summarize_chat_history(self, chat_history: str) -> str:
+        """Use LLM to produce a short summary of chat history, preserving legal entities.
+
+        Returns a 1-3 sentence summary suitable for including in prompts.
+        """
+        SUMMARIZE_SYSTEM = (
+            "Bạn là một trợ lý tóm tắt chuyên nghiệp. Nhiệm vụ: tóm tắt ngắn gọn lịch sử hội thoại, "
+            "giữ lại các thực thể pháp lý quan trọng (tên luật, tội danh, điều khoản, con số, thời gian, đối tượng)."
+        )
+
+        SUMMARIZE_USER = """
+Chat History:
+{chat_history}
+
+Tóm tắt ngắn (1-3 câu), nhấn mạnh chủ đề pháp lý và các thực thể quan trọng:
+"""
+
+        resp = self.client.chat.completions.create(
+            model=self.simple_model,
+            messages=[
+                {"role": "system", "content": SUMMARIZE_SYSTEM},
+                {"role": "user", "content": SUMMARIZE_USER.format(chat_history=chat_history)},
+            ],
+            temperature=0.0,
+            max_tokens=128,
+        )
+        summary = resp.choices[0].message.content.strip()
+        # One-line normalize
+        summary = " ".join(summary.split())
+        return summary
+
+    def generate_pipeline(self, question: str, chat_history: str, retriever, context_chunks: list[dict] = None) -> str:
+        """Two-stage pipeline: condense question -> generate Lex answer.
+
+        Args:
+            question: latest user input (may be follow-up)
+            chat_history: short chat history or summary (string)
+            retriever: Retriever instance to fetch context
+            context_chunks: (optional) pre-fetched context chunks (default None)
+
+        Returns:
+            str: assistant response generated by Lex
+        """
+        # Stage 1: condense to standalone question
+        standalone = self.condense_question(chat_history, question)
+
+        # Fetch new documents using the condensed question
+        if context_chunks is None:
+            context_chunks = retriever.retrieve(standalone)
+
+        # Stage 2: prepare pipeline prompt and generate
+        logger.info("Generating pipeline answer | model=%s | chunks=%d | question: %.80s", self.simple_model, len(context_chunks), standalone)
+        t0 = time.perf_counter()
+        context = self._format_context(context_chunks)
+        prepared_history = self.prepare_chat_history(chat_history)
+        user_prompt = PIPELINE_PROMPT_TEMPLATE.format(
+            context=context,
+            chat_history=(prepared_history or ""),
+            standalone_question=standalone,
+        )
+
+        response = self.client.chat.completions.create(
+            model=self.simple_model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+        usage = getattr(response, 'usage', None)
+        if usage:
+            try:
+                logger.info(
+                    "Pipeline generation done in %.2fs | tokens: prompt=%d completion=%d total=%d",
+                    time.perf_counter() - t0,
+                    usage.prompt_tokens,
+                    usage.completion_tokens,
+                    usage.total_tokens,
+                )
+            except Exception:
+                pass
+        return response.choices[0].message.content.strip()
     
     def _format_context(self, chunks: list[dict]) -> str:
         """
@@ -190,6 +388,7 @@ class LLMGenerator:
         self,
         query: str,
         context_chunks: list[dict],
+        chat_history: str = "",
     ) -> tuple[str, dict]:
         """
         Sinh phân tích pháp lý theo Tam đoạn luận (Chain-of-Thought).
@@ -212,13 +411,15 @@ class LLMGenerator:
                 - answer_str:    Markdown string đầy đủ để hiển thị.
                 - reasoning_dict: Dict cấu trúc CoT để frontend parse.
         """
+        # Ensure follow-up questions are rewritten into standalone form first
+        standalone = self.condense_question(chat_history, query)
         logger.info(
             "Generating reasoning answer | model=%s | chunks=%d | query: %.80s",
-            self.reasoning_model, len(context_chunks), query,
+            self.reasoning_model, len(context_chunks), standalone,
         )
         t0 = time.perf_counter()
         context = self._format_context(context_chunks)
-        user_prompt = _REASONING_USER.format(context=context, query=query)
+        user_prompt = _REASONING_USER.format(context=context, query=standalone)
 
         try:
             response = self.client.chat.completions.create(

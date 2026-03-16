@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
             "Phù hợp với câu hỏi tranh chấp / tình huống / xác định lỗi."
         ),
     )
+    chat_history: Optional[list[dict]] = Field(default_factory=list, description="Lịch sử hội thoại (dạng list các turn: user/assistant)")
 
 class IngestRequest(BaseModel):
     """

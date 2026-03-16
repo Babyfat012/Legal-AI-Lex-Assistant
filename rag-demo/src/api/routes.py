@@ -139,59 +139,34 @@ def chat(
         hyde_doc: str | None = None
         reasoning_steps: dict | None = None
 
-        # ── Retrieval ──────────────────────────────────────────────────
-        if request.reasoning_mode:
-            logger.info("Mode=reasoning | activating Query Decomposition + HyDE")
-            chunks, sub_queries, hyde_doc = retriever.retrieve_advanced(
-                query=request.query,
-                query_analyzer=get_query_analyzer(),
-                use_hyde=True,
-                use_decomposition=True,
-            )
-        else:
-            chunks = retriever.retrieve(request.query)
+        # --- Chuẩn hóa chat_history (list[dict] -> list[str]) ---
+        chat_history = request.chat_history or []
+        history_turns = []
+        for turn in chat_history:
+            if isinstance(turn, dict) and "role" in turn and "content" in turn:
+                # Format: "User: ..." hoặc "Assistant: ..."
+                prefix = "User" if turn["role"] == "user" else "Assistant"
+                history_turns.append(f"{prefix}: {turn['content']}")
+            elif isinstance(turn, str):
+                history_turns.append(turn)
 
-        if not chunks:
-            return ChatResponse(
-                answer="Tôi không tìm thấy thông tin liên quan trong các văn bản pháp luật được cung cấp.",
-                sources=[],
-                query=request.query,
-                mode=mode,
-                sub_queries=sub_queries,
-                hyde_doc=hyde_doc,
-            )
+        # --- Pipeline: Rewrite (condense) + Retrieve + Generate ---
+        answer = generator.generate_pipeline(
+            question=request.query,
+            chat_history="\n".join(history_turns),
+            retriever=retriever,
+        )
 
-        # ── Generation ─────────────────────────────────────────────────
-        if request.reasoning_mode:
-            answer, reasoning_steps = generator.generate_with_reasoning(
-                query=request.query,
-                context_chunks=chunks,
-            )
-        else:
-            answer = generator.generate(
-                query=request.query,
-                context_chunks=chunks,
-            )
+        # Lấy lại standalone question để trả về (nếu cần debug)
+        # standalone = generator.condense_question("\n".join(history_turns), request.query)
 
-        # ── Format sources ─────────────────────────────────────────────
-        sources = [
-            SourceChunk(
-                text=chunk["text"],
-                parent_content=chunk.get("parent_content") or None,
-                score=chunk.get("score", 0.0),
-                rerank_score=chunk.get("rerank_score"),
-                luat=chunk["metadata"].get("luat"),
-                chuong=chunk["metadata"].get("chuong"),
-                muc=chunk["metadata"].get("muc"),
-                dieu=chunk["metadata"].get("dieu"),
-                filename=chunk["metadata"].get("filename"),
-            )
-            for chunk in chunks
-        ]
+        # TODO: Nếu muốn lấy lại sources thực tế, cần refactor generate_pipeline để trả về cả chunks
+        # Hiện tại, chỉ trả về answer và context từ pipeline
+        sources = []
 
         logger.info(
-            "POST /chat done | mode=%s | chunks=%d | %.2fs",
-            mode, len(chunks), time.perf_counter() - t0,
+            "POST /chat done | mode=%s | %.2fs",
+            mode, time.perf_counter() - t0,
         )
         return ChatResponse(
             answer=answer,

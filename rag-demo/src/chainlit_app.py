@@ -151,15 +151,18 @@ async def main(message: cl.Message):
     msg = cl.Message(content="🔍 Đang truy vấn cơ sở dữ liệu luật...")
     await msg.send()
 
+    # --- Lấy và cập nhật lịch sử hội thoại ---
+    history = cl.user_session.get("chat_history", []) or []
+
     # Chuẩn bị payload
     reasoning_mode = _get_setting("reasoning_mode", False)
     top_k = _get_setting("top_k", DEFAULT_TOP_K)
-    
     payload = {
         "query": user_text,
         "top_k": int(top_k),
         "use_reranker": True,
         "reasoning_mode": bool(reasoning_mode),
+        "chat_history": history,
     }
 
     if httpx is None:
@@ -190,5 +193,8 @@ async def main(message: cl.Message):
     if reasoning:
         await cl.Message(content=format_reasoning_md(reasoning)).send()
 
-    # Lưu session
+    # --- Cập nhật lại lịch sử hội thoại ---
+    history.append({"role": "user", "content": user_text})
+    history.append({"role": "assistant", "content": answer})
+    cl.user_session.set("chat_history", history[-10:])
     cl.user_session.set("last_query", user_text)
