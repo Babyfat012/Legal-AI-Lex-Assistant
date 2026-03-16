@@ -5,3 +5,7 @@
 /documents/
 rag-demo/logs/*.log
 rag-demo/logs/*.log.*
+
+# Ignore Chainlit and auxiliary UI folders anywhere in the repo
+**/.chainlit/
+**/.files/
