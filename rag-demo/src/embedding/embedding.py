@@ -1,4 +1,5 @@
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 from core.logger import get_logger
@@ -36,11 +37,11 @@ class EmbeddingService:
     def dimension(self) -> int:
         """Trả về dimension của embedding vector cho model hiện tại."""
         return self._DIMENSION_MAP.get(self.model, 1536)
-    
+
     def embed_text(self, text: str) -> list[float]:
         """
         Embed 1 đoạn text thành vector.
-        
+
         Args:
             text: Chuỗi văn bản cần embed.
 
@@ -53,19 +54,24 @@ class EmbeddingService:
         )
         return response.data[0].embedding
 
-    def embed_documents(self, texts: list[str], batch_size: int = 100, max_workers: int = 6) -> list[list[float]]:
+    def embed_documents(
+        self,
+        texts: list[str],
+        batch_size: int = 100,
+        max_workers: int = 3,
+        max_retries: int = 5,
+    ) -> list[list[float]]:
         """
-        Embed nhiều đoạn text thành vectors.
-        Gửi các batch song song thay vì tuần tự → giảm latency đáng kể
-        khi có nhiều batch (I/O-bound, ThreadPoolExecutor phù hợp).
+        Embed nhiều documents với retry logic cho rate limit.
 
         Args:
-            texts:       Danh sách chuỗi văn bản cần embed.
-            batch_size:  Số text mỗi batch gửi lên API. Mặc định 100.
-            max_workers: Số thread song song. Mặc định 6 (cân bằng tốc độ / rate-limit).
+            texts: Danh sách văn bản cần embed
+            batch_size: Số text mỗi batch (default: 100)
+            max_workers: Số threads song song (default: 3)
+            max_retries: Số lần retry khi gặp rate limit (default: 5)
 
         Returns:
-            list[list[float]]: Danh sách vector embedding theo đúng thứ tự input.
+            list[list[float]]: Danh sách embedding vectors
         """
         if not texts:
             return []
@@ -75,10 +81,40 @@ class EmbeddingService:
         results: list[list[list[float]] | None] = [None] * n_batches
 
         def _embed_batch(batch_idx: int, batch: list[str]) -> tuple[int, list[list[float]]]:
-            response = self.client.embeddings.create(input=batch, model=self.model)
-            embeddings = [item.embedding for item in sorted(response.data, key=lambda x: x.index)]
-            logger.debug("Embedded batch %d/%d | %d texts", batch_idx + 1, n_batches, len(batch))
-            return batch_idx, embeddings
+            for attempt in range(max_retries):
+                try:
+                    response = self.client.embeddings.create(
+                        input=batch,
+                        model=self.model,
+                    )
+                    embeddings = [
+                        item.embedding
+                        for item in sorted(response.data, key=lambda x: x.index)
+                    ]
+                    logger.debug(
+                        "Embedded batch %d/%d | %d texts",
+                        batch_idx + 1, n_batches, len(batch),
+                    )
+                    return batch_idx, embeddings
+
+                except Exception as e:
+                    if "429" in str(e) or "rate_limit" in str(e).lower():
+                        wait = 2 ** attempt  # 1, 2, 4, 8, 16s
+                        logger.warning(
+                            "Rate limit | batch %d/%d | retry %d/%d | wait %ds",
+                            batch_idx + 1, n_batches, attempt + 1, max_retries, wait,
+                        )
+                        time.sleep(wait)
+                    else:
+                        logger.error(
+                            "Embedding error | batch %d/%d | %s",
+                            batch_idx + 1, n_batches, e,
+                        )
+                        raise
+
+            raise RuntimeError(
+                f"Batch {batch_idx + 1}/{n_batches} failed sau {max_retries} retries"
+            )
 
         workers = min(max_workers, n_batches)
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -102,11 +138,10 @@ class EmbeddingService:
             workers,
         )
         return all_embeddings
-    
+
     def embed_query(self, query: str) -> list[float]:
         """
         Embed query text cho retrieval.
-        Tách riêng để sau này có thể thêm logic khác cho query vs document.
 
         Args:
             query: Câu hỏi cần embed
@@ -114,4 +149,4 @@ class EmbeddingService:
         Returns:
             list[float]: Query embedding vector
         """
-        return self.embed_text(query)
+        return self.embed_text(query)   

@@ -7,9 +7,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Chunk:
-    """
-    Represent a chunk of text split from a Document
-    """
     text: str
     metadata: dict = field(default_factory=dict)
     chunk_index: int = 0
@@ -17,15 +14,11 @@ class Chunk:
 
 @dataclass
 class ParentChildResult:
-    """Kết quả chunking theo chiến lược Parent-Child."""
-
     parents: list[Chunk]
     children: list[Chunk]
 
 
 class SemanticChunkSplitter:
-    """Semantic/token-aware splitter dùng cho parent và child chunks."""
-
     def __init__(
         self,
         max_tokens: int = 256,
@@ -173,8 +166,6 @@ class SemanticChunkSplitter:
 
 
 class LegalMetadataExtractor:
-    """Trích xuất metadata cấu trúc luật từ Markdown headings (stateful)."""
-
     PATTERN_PHAN = re.compile(
         r"(?:^|\n)#\s+PHẦN\s+(THỨ\s+\w+|[IVXLCDM]+|\d+)[.,\s]*(.*?)(?:\n|$)",
         re.IGNORECASE,
@@ -263,34 +254,7 @@ class LegalMetadataExtractor:
         return "[" + " - ".join(parts) + "]\n" if parts else ""
 
 
-# =============================================================================
-# PARENT-CHILD CHUNKER  (Chiến lược 2 cấp)
-# =============================================================================
-
 class ParentChildChunker:
-    """
-    Chiến lược chunking 2 cấp cho RAG chatbot pháp luật.
-
-    Vấn đề cốt lõi — 2 mục tiêu xung đột:
-        - Retrieval cần chunk NHỎ  → embedding tập trung, cosine sim cao → tìm trúng
-        - Generation cần chunk LỚN → LLM đủ ngữ cảnh → trả lời đầy đủ
-
-    Giải pháp Parent-Child:
-    ┌──────────────────────────────────────────────────────────────┐
-    │  Document → tách tại #### Điều → PARENT chunks              │
-    │                       ↓                                     │
-    │  Mỗi Parent → SemanticChunkSplitter → CHILD chunks          │
-    │  child.metadata["parent_id"] → tra parent_store → full text │
-    │                                                             │
-    │  Qdrant index: CHỈ children (embedding nhỏ, chính xác)     │
-    │  LLM context : parent.text  (đầy đủ nội dung Điều)         │
-    └──────────────────────────────────────────────────────────────┘
-
-    Enriched metadata (động):
-        summary:          1 câu tóm tắt nội dung Điều (Self-Summary Context)
-        related_articles: các Điều được tham chiếu trong nội dung (Cross-Reference)
-    """
-
     def __init__(
         self,
         parent_max_tokens: int = 512,
@@ -314,28 +278,19 @@ class ParentChildChunker:
                                   None → sentence-packing fallback (không cần API call).
         """
         self.add_context_prefix = add_context_prefix
-
-        # Sub-components
         self.metadata_extractor = LegalMetadataExtractor()
-
-        # Parent splitter: đảm bảo parent ≤ 512 tokens (đủ cho LLM)
         self.parent_splitter = SemanticChunkSplitter(
             max_tokens=parent_max_tokens,
             tokenizer_encoding=tokenizer_encoding,
             similarity_threshold=similarity_threshold,
             embedder=embedder,
         )
-        # Child splitter: đảm bảo child ≤ 128 tokens (tối ưu embedding)
         self.child_splitter = SemanticChunkSplitter(
             max_tokens=child_max_tokens,
             tokenizer_encoding=tokenizer_encoding,
             similarity_threshold=similarity_threshold,
             embedder=embedder,
         )
-
-    # ------------------------------------------------------------------ #
-    #  Public API                                                          #
-    # ------------------------------------------------------------------ #
 
     def chunk_document(self, document: Document) -> ParentChildResult:
         """

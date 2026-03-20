@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+from typing import Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     VectorParams,
@@ -14,6 +15,7 @@ from qdrant_client.models import (
     Fusion,
     ScoredPoint,
     PayloadSchemaType,
+    # Filter,
 )
 from ingestion.chunking import Chunk
 from core.logger import get_logger
@@ -246,6 +248,7 @@ class QdrantVectorStore:
         query_sparse: SparseVector,
         top_k: int = 20,
         score_threshold: float = None,
+        # filter: Optional[Filter] = None,   # Thêm filter parameter
     ) -> list[dict]:
         """
         Hybrid search: Dense + Sparse kết hợp bằng Reciprocal Rank Fusion.
@@ -255,6 +258,7 @@ class QdrantVectorStore:
             query_sparse: Sparse embedding của query
             top_k: Số kết quả trả về sau fusion
             score_threshold: Lọc bỏ kết quả có RRF score thấp hơn ngưỡng (None = không lọc)
+            filter: Bộ lọc để áp dụng trên các payload
 
         Returns:
             list[dict]: Kết quả đã fusion, gồm text + score + metadata
@@ -276,12 +280,14 @@ class QdrantVectorStore:
                     query=query_dense,
                     using=DENSE_VECTOR_NAME,
                     limit=dense_limit,
+                    # filter=filter,  # Thêm filter vào đây
                 ),
-                # Nhánh 2: Keyword seach (sparse BM25)
+                # Nhánh 2: Keyword search (sparse BM25)
                 Prefetch(
                     query=query_sparse,
                     using=SPARSE_VECTOR_NAME,
                     limit=sparse_limit,
+                    # filter=filter,  # Thêm filter vào đây
                 ),
             ],
             # Qdrant native RRF: rank từ 2 nhánh, không phụ thuộc score scale
@@ -289,6 +295,7 @@ class QdrantVectorStore:
             limit=top_k,
             score_threshold=score_threshold,
             with_payload=True,
+            # filter=filter,  # Thêm filter vào đây
         )
 
         logger.info(
@@ -309,16 +316,29 @@ class QdrantVectorStore:
         ]
     
     def vector_search(
-            self, 
-            query_dense: list[float],
-            top_k: int = 20,
+        self, 
+        query_dense: list[float],
+        top_k: int = 20,
+        # filter: Optional[Filter] = None,  # Thêm filter parameter
     ) -> list[dict]:
+        """
+        Vector search: chỉ sử dụng Dense Vector.
+
+        Args:
+            query_dense: Dense embedding của query
+            top_k: Số kết quả trả về
+            filter: Bộ lọc để áp dụng trên các payload
+
+        Returns:
+            list[dict]: Kết quả search, gồm text + score + metadata
+        """
         results = self.client.query_points(
             collection_name=self.collection_name,
             query=query_dense,
             using=DENSE_VECTOR_NAME,
             limit=top_k,
             with_payload=True,
+            # filter=filter,  # Thêm filter vào đây
         )
         return [
             {

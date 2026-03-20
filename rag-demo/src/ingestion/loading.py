@@ -9,30 +9,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Document:
-    """ Represent a loaded document with text content and metadata"""
     text: str
     metadata: dict = field(default_factory=dict)
 
 
 class DocumentLoader:
-    """
-    Load documents từ file hoặc thư mục.
-    Hỗ trợ: .txt, .md, .pdf, .docx
-
-    Nếu file là PDF/DOCX, tự động chuyển sang Markdown trước (pre-processing).
-
-    **Streaming mode cho PDF lớn:**
-    Khi file PDF vượt ngưỡng ``large_file_threshold_mb`` (mặc định 10 MB),
-    loader tự động chuyển sang chế độ đọc từng batch trang thay vì load
-    toàn bộ vào RAM một lúc:
-        - Dùng ``pypdf`` đọc ``pages_per_batch`` trang / lần
-        - Áp dụng chuẩn hóa heading luật VN cho từng batch
-        - Gọi ``gc.collect()`` giữa các batch để giải phóng RAM
-        - Mỗi batch sinh ra 1 ``Document`` riêng với metadata ``page_start``
-          / ``page_end`` / ``batch_index``
-    """
-
-    SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".doc"}
+    SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx"}
 
     DEFAULT_LARGE_FILE_THRESHOLD_MB: float = 10.0
     DEFAULT_PAGES_PER_BATCH: int = 20               
@@ -72,35 +54,36 @@ class DocumentLoader:
             self._converter = MarkdownConverter(backend=backend)
         return self._converter
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
     def _extract_law_name(self, filename: str) -> str:
         """
         Trích xuất tên Luật từ tên file để dùng làm metadata ``luat``.
 
-        Ví dụ:
-            ``luat_dan_su_2015.pdf``  → ``"Luật Dân Sự 2015"``
-            ``bo_luat_hinh_su.txt``   → ``"Bộ Luật Hình Sự"``
-        """
-        stem = Path(filename).stem          # bỏ extension
-        law_name = stem.replace("_", " ").replace("-", " ").title()
-        return law_name
+        Sử dụng lookup dict để map tên file sang tên luật chuẩn.
+        Nếu không tìm thấy, giữ nguyên stem của file.
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+        Ví dụ:
+            ``luat_dan_su_2015.pdf``  → ``"Bộ luật Dân sự"``
+            ``bo_luat_hinh_su.txt``   → ``"Bộ luật Hình sự"``
+        """
+        LAW_NAME_MAP = {
+            "bo_luat_dan_su_2015": "Bộ luật Dân sự 2015",
+            "luat_dat_dai": "Luật Đất đai",
+            "luat_nha_o": "Luật Nhà ở",
+            "luat_honnhan_giadinh": "Luật Hôn nhân và Gia đình",
+            "luat_xu_ly_vphc": "Luật Xử lý vi phạm hành chính",
+            "luat_36_2024_qh15": "Luật số 36/2024/QH15",
+            "luat_35_2024_qh15": "Luật số 35/2024/QH15",
+            "nghi_dinh_168": "Nghị định 168",
+            "p1_vb_hop_nhat_blhs_2024": "Văn bản hợp nhất BLHS 2024",
+        }
+
+        stem = Path(filename).stem  # Bỏ extension
+        base_name = stem.rsplit("_", 1)[0]  # Loại bỏ phần năm nếu có
+        return LAW_NAME_MAP.get(base_name.lower(), stem.replace("_", " ").replace("-", " "))
 
     def load_file(self, file_path: str) -> list[Document]:
         """
         Load 1 file, trả về list[Document].
-
-        - ``.txt`` / ``.md`` → đọc thẳng.
-        - ``.docx`` / ``.doc`` → chuyển sang Markdown qua converter.
-        - ``.pdf`` nhỏ (< threshold) → chuyển sang Markdown qua converter.
-        - ``.pdf`` lớn (>= threshold) → **streaming mode** (page-by-page),
-          trả về nhiều Document (mỗi Document = 1 batch trang).
 
         Args:
             file_path: Đường dẫn file cần load.
@@ -117,7 +100,6 @@ class DocumentLoader:
         if ext not in self.SUPPORTED_EXTENSIONS:
             raise ValueError(f"Unsupported file type: {ext}")
 
-        # ── Plain text / Markdown ──────────────────────────────────────
         if ext in {".txt", ".md"}:
             text = path.read_text(encoding="utf-8")
             return [Document(
@@ -131,7 +113,6 @@ class DocumentLoader:
                 },
             )]
 
-        # ── PDF: routing theo kích thước ──────────────────────────────
         if ext == ".pdf":
             size_mb = path.stat().st_size / (1024 * 1024)
             if size_mb >= self.large_file_threshold_mb:
@@ -147,7 +128,6 @@ class DocumentLoader:
                 "[Loader] Small PDF: %s (%.1f MB) → normal mode", path.name, size_mb
             )
 
-        # ── DOCX / nhỏ → convert toàn bộ như cũ ──────────────────────
         text = self.converter.convert_file(str(path))
         return [Document(
             text=text,
@@ -197,21 +177,6 @@ class DocumentLoader:
     # ------------------------------------------------------------------
 
     def _load_pdf_streaming(self, path: Path) -> Iterator[Document]:
-        """
-        Đọc PDF theo từng batch trang để tránh tràn RAM.
-
-        Flow mỗi batch:
-            1. pypdf trích xuất text ``pages_per_batch`` trang
-            2. Áp dụng ``_post_process_legal`` (chuẩn hóa heading luật VN)
-            3. Yield 1 ``Document`` với metadata đầy đủ
-            4. Xóa tham chiếu intermediate + ``gc.collect()``
-
-        Args:
-            path: Đường dẫn file PDF.
-
-        Yields:
-            Document — mỗi batch trang là 1 Document.
-        """
         try:
             import pypdf
         except ImportError:
@@ -259,9 +224,7 @@ class DocumentLoader:
                 batch_count += 1
                 continue
 
-            # Chuẩn hóa heading luật VN (dùng lại _post_process_legal từ converter)
             processed_text = self.converter._post_process_legal(raw_text)
-
             yield Document(
                 text=processed_text,
                 metadata={
@@ -275,8 +238,6 @@ class DocumentLoader:
                     "batch_index": batch_count,
                     "streaming_mode": True,
                     "luat": self._extract_law_name(path.name),
-                    "has_carry_over": has_carry,
-                    "batch_overlap_pages": self.batch_overlap,
                 },
             )
 
@@ -297,4 +258,4 @@ class DocumentLoader:
             "[Loader][Stream] Done: %s | %d pages → %d batches (%d non-empty)",
             path.name, total_pages, batch_count, yielded_count,
         )
-    
+

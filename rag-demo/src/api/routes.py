@@ -1,11 +1,15 @@
 import os
 import time
+from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Depends
 from functools import lru_cache
 
 from api.schemas import (
-    ChatRequest, ChatResponse, SourceChunk,
-    IngestRequest, IngestResponse,
+    ChatRequest,
+    ChatResponse,
+    SourceChunk,
+    IngestRequest,
+    IngestResponse,
     CollectionInfoResponse,
     HealthResponse,
 )
@@ -25,14 +29,38 @@ router = APIRouter()
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Đường dẫn tuyệt đối tới BM25 vocab — dùng chung cho pipeline và retriever
 _BM25_VOCAB_PATH: str = os.getenv(
     "BM25_VOCAB_PATH",
     os.path.join(BASE_DIR, "data", "bm25_vocab.json"),
 )
 
+# ---------------------------------------------------------------------------
+# Server-side conversation store
+# ---------------------------------------------------------------------------
+# Lưu history theo session_id để không phụ thuộc client gửi đúng.
+# Key: session_id (str), Value: list[dict] với format {"role": ..., "content": ...}
+# Giới hạn MAX_TURNS * 2 messages (user + assistant) để tránh memory leak.
+# ---------------------------------------------------------------------------
+_MAX_HISTORY_TURNS = 6  # 3 cặp user/assistant
+_conversation_store: dict[str, list[dict]] = defaultdict(list)
+
+
+def _get_history(session_id: str) -> list[dict]:
+    """Lấy history của session, trả về list rỗng nếu chưa có."""
+    return _conversation_store.get(session_id, [])
+
+
+def _append_history(session_id: str, role: str, content: str) -> None:
+    """Thêm 1 turn vào history, tự cắt bớt nếu vượt giới hạn."""
+    store = _conversation_store[session_id]
+    store.append({"role": role, "content": content})
+    # Giữ tối đa _MAX_HISTORY_TURNS * 2 messages (rolling window)
+    if len(store) > _MAX_HISTORY_TURNS * 2:
+        _conversation_store[session_id] = store[-(_MAX_HISTORY_TURNS * 2) :]
+
 
 # --- Dependency injection (singleton via lru_cache) ---
+
 
 @lru_cache(maxsize=1)
 def get_embedding_service() -> EmbeddingService:
@@ -41,7 +69,6 @@ def get_embedding_service() -> EmbeddingService:
 
 @lru_cache(maxsize=1)
 def get_bm25_encoder() -> BM25Encoder:
-    # BM25Encoder.__init__ tự động load vocab nếu file đã tồn tại
     return BM25Encoder(vocab_path=_BM25_VOCAB_PATH)
 
 
@@ -61,7 +88,7 @@ def get_retriever() -> Retriever:
         bm25_encoder=get_bm25_encoder(),
         vector_store=get_vector_store(),
         reranker=Reranker(),
-        initial_top_k=20,
+        initial_top_k=40,
         final_top_n=5,
         use_reranker=True,
     )
@@ -82,8 +109,6 @@ def get_query_analyzer() -> QueryAnalyzer:
 
 @lru_cache(maxsize=1)
 def get_pipeline() -> IngestionPipeline:
-    # Dùng chung get_bm25_encoder() singleton — pipeline và retriever
-    # cùng trỏ tới 1 object BM25, đảm bảo vocab nhất quán sau khi ingest
     return IngestionPipeline(
         embedding_service=get_embedding_service(),
         bm25_encoder=get_bm25_encoder(),
@@ -110,6 +135,7 @@ def health_check():
         openai_key_set=bool(os.getenv("OPENAI_API_KEY")),
     )
 
+
 @router.post("/chat", response_model=ChatResponse, tags=["RAG"])
 def chat(
     request: ChatRequest,
@@ -124,10 +150,17 @@ def chat(
 
     **Reasoning mode** (``reasoning_mode=true``):
         Query → Decompose + HyDE → Multi-search → Rerank → ``reasoning_model`` + CoT
+
+    Session management:
+        Truyền ``session_id`` trong request để duy trì ngữ cảnh hội thoại.
+        Nếu không truyền, mỗi request được coi là conversation mới (không có history).
     """
     logger.info(
         "POST /chat | query: %.80s | top_k=%d | use_reranker=%s | reasoning_mode=%s",
-        request.query, request.top_k, request.use_reranker, request.reasoning_mode,
+        request.query,
+        request.top_k,
+        request.use_reranker,
+        request.reasoning_mode,
     )
     t0 = time.perf_counter()
     try:
@@ -139,34 +172,86 @@ def chat(
         hyde_doc: str | None = None
         reasoning_steps: dict | None = None
 
-        # --- Chuẩn hóa chat_history (list[dict] -> list[str]) ---
-        chat_history = request.chat_history or []
+        # FIX: ưu tiên server-side history (đáng tin cậy hơn client-sent history)
+        # Client có thể không gửi chat_history, hoặc gửi thiếu — server tự lưu
+        session_id = getattr(request, "session_id", None) or ""
+        server_history = _get_history(session_id) if session_id else []
+
+        # Fallback về client-sent history nếu server chưa có (lần đầu kết nối)
+        if server_history:
+            effective_history = server_history
+            logger.debug(
+                "Using server-side history | session=%s | turns=%d",
+                session_id,
+                len(server_history),
+            )
+        else:
+            # Normalize client-sent history (list[dict] hoặc list[str])
+            client_history = request.chat_history or []
+            effective_history = [
+                (
+                    turn
+                    if isinstance(turn, dict) and "role" in turn and "content" in turn
+                    else {"role": "user", "content": str(turn)}
+                )
+                for turn in client_history
+            ]
+            logger.debug(
+                "Using client-sent history | turns=%d",
+                len(effective_history),
+            )
+
+        # Format history thành string cho generator
         history_turns = []
-        for turn in chat_history:
-            if isinstance(turn, dict) and "role" in turn and "content" in turn:
-                # Format: "User: ..." hoặc "Assistant: ..."
-                prefix = "User" if turn["role"] == "user" else "Assistant"
-                history_turns.append(f"{prefix}: {turn['content']}")
-            elif isinstance(turn, str):
-                history_turns.append(turn)
+        for turn in effective_history:
+            prefix = "User" if turn.get("role") == "user" else "Assistant"
+            history_turns.append(f"{prefix}: {turn['content']}")
+
+        chat_history_str = "\n".join(history_turns)
+
+        logger.debug(
+            "chat_history passed to generator | len=%d | preview=%.120s",
+            len(chat_history_str),
+            chat_history_str,
+        )
 
         # --- Pipeline: Rewrite (condense) + Retrieve + Generate ---
-        answer = generator.generate_pipeline(
+        answer, retrieved_chunks = generator.generate_pipeline(
             question=request.query,
-            chat_history="\n".join(history_turns),
+            chat_history=chat_history_str,
             retriever=retriever,
         )
 
-        # Lấy lại standalone question để trả về (nếu cần debug)
-        # standalone = generator.condense_question("\n".join(history_turns), request.query)
+        # FIX: lưu turn mới vào server-side store sau khi generate thành công
+        if session_id:
+            _append_history(session_id, "user", request.query)
+            _append_history(session_id, "assistant", answer)
+            logger.debug(
+                "History updated | session=%s | total_turns=%d",
+                session_id,
+                len(_conversation_store[session_id]),
+            )
 
-        # TODO: Nếu muốn lấy lại sources thực tế, cần refactor generate_pipeline để trả về cả chunks
-        # Hiện tại, chỉ trả về answer và context từ pipeline
-        sources = []
+        # Populate sources
+        sources = [
+            {
+                "text": chunk.get("text"),
+                "parent_content": chunk["metadata"].get("parent_content"),
+                "score": chunk.get("score"),
+                "rerank_score": chunk["metadata"].get("rerank_score"),
+                "luat": chunk["metadata"].get("luat"),
+                "chuong": chunk["metadata"].get("chuong"),
+                "muc": chunk["metadata"].get("muc"),
+                "dieu": chunk["metadata"].get("dieu"),
+                "filename": chunk["metadata"].get("filename"),
+            }
+            for chunk in retrieved_chunks
+        ]
 
         logger.info(
             "POST /chat done | mode=%s | %.2fs",
-            mode, time.perf_counter() - t0,
+            mode,
+            time.perf_counter() - t0,
         )
         return ChatResponse(
             answer=answer,
@@ -193,19 +278,22 @@ def ingest(
 
     Pipeline: Load → Pre-process → Chunk → Embed (Dense+Sparse) → Store
     """
-    logger.info("POST /ingest | file=%s | is_dir=%s | recreate=%s",
-                request.file_path, request.is_directory, request.recreate_collection)
+    logger.info(
+        "POST /ingest | file=%s | is_dir=%s | recreate=%s",
+        request.file_path,
+        request.is_directory,
+        request.recreate_collection,
+    )
     if not os.path.exists(request.file_path):
         raise HTTPException(
             status_code=400,
             detail=f"File not found: {request.file_path}",
         )
-    
+
     try:
         if request.recreate_collection:
             store = get_vector_store()
             store.recreate_collection()
-            # Clear lru_cache để reinitialize
             get_vector_store.cache_clear()
             get_retriever.cache_clear()
             get_pipeline.cache_clear()
@@ -224,7 +312,8 @@ def ingest(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 @router.get("/collection/info", response_model=CollectionInfoResponse, tags=["System"])
 def collection_info(store: QdrantVectorStore = Depends(get_vector_store)):
     """Lấy thông tin collection Qdrant hiện tại."""
@@ -233,7 +322,8 @@ def collection_info(store: QdrantVectorStore = Depends(get_vector_store)):
         return CollectionInfoResponse(**info)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 @router.delete("/collection", tags=["System"])
 def delete_collection(store: QdrantVectorStore = Depends(get_vector_store)):
     """Xóa toàn bộ collection (dùng khi cần reset)."""

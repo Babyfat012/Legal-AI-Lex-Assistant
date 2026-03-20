@@ -8,26 +8,12 @@ class ConverterBackend(str, Enum):
     DOCLING = "docling"
 
 class MarkdownConverter:
-    """
-    Pre-processing: Chuyển PDF/DOCX -> Markdown text
-    Giữ nguyên cấu trúc file dưới dạng heading markdown    
-
-    Flow:
-        file.pdf / file.docx
-            -> converter -> raw markdown
-            -> chuanar hóa heading theo cấu trúc luật VN
-    """
-
-    SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md"}
+    SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
     def __init__(self, backend: ConverterBackend = ConverterBackend.MARKITDOWN):
-        """
-        Args:
-            backend: Engine chuyển đổi ("markitdown" hoặc "docling")
-        """
         self.backend = backend
-        self._md_instance = None       # lazy init — khởi tạo 1 lần khi cần
-        self._docling_instance = None  # lazy init — khởi tạo 1 lần khi cần
+        self._md_instance = None       # lazy init
+        self._docling_instance = None  # lazy init
     
     def convert_file(self, file_path: str, output_path: str = None) -> str:
         """
@@ -62,11 +48,9 @@ class MarkdownConverter:
                 raw_md = self._convert_with_docling(path)
             else:
                 raise ValueError(f"Unsupported converter backend: {self.backend}")
-            
-        # Post-process markdown để chuẩn hóa heading theo cấu trúc luật VN
+        
         processed_md = self._post_process_legal(raw_md)
 
-        # Lưu file markdown nếu output_path được cung cấp
         if output_path:
             output = Path(output_path)
             output.parent.mkdir(parents=True, exist_ok=True)
@@ -74,56 +58,8 @@ class MarkdownConverter:
             print(f"Saved markdown: {output}")
         
         return processed_md
-    
-
-    def convert_directory(
-            self, dir_path: str, output_dir: str = None
-    ) -> dict[str, str]:
-        """
-        Chuyển tất cả file trong thư mục sang markdown
-
-        Args:
-            dir_path: đường dẫn thư mục chứa file gốc
-            output_dir: đường dẫn thư mục lưu file markdown (None thì không lưu, chỉ trả về dict)
-
-        Return:
-            dict[str, str]:  Mapping {filename, markdown_content}
-        """
-        dir_path = Path(dir_path)
-        if not dir_path.is_dir():
-            raise NotADirectoryError(f"Not a directory: {dir_path}")
-        
-        results = {}
-
-        for file_path in sorted(dir_path.rglob("*")):
-            if file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS:
-                try:
-                    output_path = None
-                    if output_dir:
-                        # Giữ nguyên tên file nhưng đổi extension thành .md
-                        relative = file_path.relative_to(dir_path)
-                        output_path = str(
-                            Path(output_dir) / relative.with_suffix(".md")
-                        )
-
-                    md_content = self.convert_file(str(file_path), output_path)
-                    results[file_path.name] = md_content
-                    print(
-                        f"Converted {file_path.name} -> {len(md_content)} chars"
-                    )
-                except Exception as e:
-                    print(f"Error converting {file_path.name}: {e}")
-
-        print(f"Total converted {len(results)} files from {dir_path}")
-        return results
-    
 
     def _convert_with_markitdown(self, path: Path) -> str:
-        """
-        Chuyển đổi file sử dụng backend markitdown.
-        Instance được khởi tạo 1 lần duy nhất (lazy init) và tái sử dụng
-        cho mọi lần gọi tiếp theo.
-        """
         if self._md_instance is None:
             try:
                 from markitdown import MarkItDown
@@ -137,11 +73,6 @@ class MarkdownConverter:
         return result.text_content
     
     def _convert_with_docling(self, path: Path) -> str:
-        """
-        Chuyển đổi file sử dụng backend docling.
-        Instance được khởi tạo 1 lần duy nhất (lazy init) và tái sử dụng
-        cho mọi lần gọi tiếp theo.
-        """
         if self._docling_instance is None:
             try:
                 from docling.document_converter import DocumentConverter
@@ -155,28 +86,9 @@ class MarkdownConverter:
         return result.document.export_to_markdown()
     
 
-    # -------------------------------------------------------------------------
-    # Post-processing: chuẩn hóa heading theo cấu trúc luật VN
-    # -------------------------------------------------------------------------
-
     def _clean_raw_text(self, text: str) -> str:
         """
         Làm sạch text thô trước khi xử lý Markdown heading.
-
-        Xử lý các artifacts phổ biến khi extract từ PDF:
-
-        1. **Null bytes** (``\x00`` / ``\u0000``): thay bằng space.
-           Đây là vấn đề cực kỳ phổ biến khi ``pypdf`` extract PDF dùng
-           CID/Type0 fonts (ví dụ nhiều văn bản luật VN scan bằng OCR).
-           Null bytes phá vỡ hoàn toàn regex heading, khiến ``CHƯƠNG\x0010``
-           không bao giờ được normalize thành ``## Chương 10``, dẫn đến
-           metadata ``chuong``/``dieu`` trống và retrieval hoàn toàn thất bại.
-
-        2. **Nhiều space liên tiếp** (không phải newline) → 1 space:
-           Sau bước 1, có thể xuất hiện double-space do thay null bằng space
-           cạnh space sẵn có.
-
-        3. **Quá nhiều dòng trống liên tiếp** → tối đa 2 dòng trống.
         """
         # 1. Null bytes → space
         text = text.replace("\x00", " ")
@@ -189,7 +101,6 @@ class MarkdownConverter:
     def _post_process_legal(self, text: str) -> str:
         """
         Chuẩn hóa văn bản luật VN sang Markdown headings.
-
         Mapping:
             PHẦN ...      → # PHẦN ...
             CHƯƠNG ...    → ## Chương ...
@@ -197,12 +108,6 @@ class MarkdownConverter:
             Điều ...      → #### Điều ...
             1. 2. 3. ...  → giữ nguyên (Khoản)
             a) b) c) ...  → giữ nguyên (Điểm)
-
-        Pipeline:
-            0. Làm sạch null bytes và artifacts PDF (``_clean_raw_text``)
-            1. Gộp tiêu đề bị ngắt 2 dòng (look-ahead buffer)
-            2. Chuẩn hóa từng dòng thành Markdown heading
-            3. Dọn dẹp khoảng trắng thừa
         """
         text = self._clean_raw_text(text)
         lines = text.split("\n")
@@ -230,9 +135,6 @@ class MarkdownConverter:
             ["#### Điều 15.", "Quy định về biển báo hiệu đường bộ"]
         VD output:
             ["#### Điều 15. Quy định về biển báo hiệu đường bộ"]
-
-        Logic: Khi gặp một dòng là tiêu đề "partial" (không có phần title),
-        peek dòng tiếp theo. Nếu dòng tiếp không phải đầu mục mới → gộp lại.
         """
         result = []
         i = 0
