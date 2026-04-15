@@ -1,0 +1,634 @@
+{
+  "total_laws": 4,
+  "total_questions": 100,
+  "datasets": [
+    {
+      "law_name": "Luật Đất đai 2024",
+      "file_path": "2_Luat_Dat_Dai.pdf",
+      "total_questions": 25,
+      "qa_pairs": [
+        {
+          "question": "Nguyên tắc phát triển, quản lý và khai thác quỹ đất được quy định như thế nào?",
+          "ground_truth": "Việc phát triển, quản lý và khai thác quỹ đất phải theo quy hoạch sử dụng đất, kế hoạch sử dụng đất, sử dụng đất đúng mục đích, công khai, minh bạch, hợp lý, hiệu quả và theo quy định của pháp luật; bảo đảm đáp ứng yêu cầu phát triển kinh tế - xã hội, hỗ trợ tái định cư, an sinh xã hội, bố trí đất ở, đất sản xuất cho đồng bào dân tộc thiểu số.",
+          "source_article": "Điều 112",
+          "id": 1
+        },
+        {
+          "question": "Quỹ phát triển đất của địa phương do cơ quan nào thành lập và mục đích là gì?",
+          "ground_truth": "Quỹ phát triển đất của địa phương là quỹ tài chính nhà nước ngoài ngân sách do Ủy ban nhân dân cấp tỉnh thành lập để ứng vốn phục vụ các nhiệm vụ thuộc chức năng của tổ chức phát triển quỹ đất, thực hiện chính sách hỗ trợ đất đai đối với đồng bào dân tộc thiểu số và các nhiệm vụ khác theo quy định của pháp luật.",
+          "source_article": "Điều 114, Khoản 1",
+          "id": 2
+        },
+        {
+          "question": "Cá nhân trực tiếp sản xuất nông nghiệp được giao đất nông nghiệp không thu tiền sử dụng đất trong trường hợp nào?",
+          "ground_truth": "Cá nhân trực tiếp sản xuất nông nghiệp được giao đất nông nghiệp trong hạn mức quy định tại Điều 176 của Luật này.",
+          "source_article": "Điều 118, Khoản 1",
+          "id": 3
+        },
+        {
+          "question": "Tổ chức kinh tế được giao đất có thu tiền sử dụng đất để thực hiện các loại dự án nào?",
+          "ground_truth": "Tổ chức kinh tế được giao đất để thực hiện dự án đầu tư xây dựng nhà ở thương mại, nhà ở xã hội, nhà ở cho lực lượng vũ trang nhân dân; dự án đầu tư cải tạo, xây dựng lại nhà chung cư theo quy định của pháp luật về nhà ở; thực hiện dự án đầu tư hạ tầng nghĩa trang để chuyển nhượng quyền sử dụng đất gắn với hạ tầng; xây dựng cơ sở lưu giữ tro cốt.",
+          "source_article": "Điều 119, Khoản 2",
+          "id": 4
+        },
+        {
+          "question": "Thẩm quyền giao đất, cho thuê đất đối với tổ chức tôn giáo thuộc về cơ quan nào?",
+          "ground_truth": "Ủy ban nhân dân cấp tỉnh quyết định giao đất, cho thuê đất đối với tổ chức tôn giáo, tổ chức tôn giáo trực thuộc.",
+          "source_article": "Điều 123, Khoản 1, Điểm b",
+          "id": 5
+        },
+        {
+          "question": "Điều kiện về hạ tầng khi tiến hành đấu giá quyền sử dụng đất là gì?",
+          "ground_truth": "Đất đã được thu hồi và hoàn thành bồi thường, hỗ trợ, tái định cư hoặc không phải bồi thường, hỗ trợ, tái định cư; trong khu vực dự án có hạ tầng giao thông đã được kết nối.",
+          "source_article": "Điều 125, Khoản 2, Điểm a",
+          "id": 6
+        },
+        {
+          "question": "Hồ sơ địa chính được lập và tập hợp theo đơn vị hành chính nào?",
+          "ground_truth": "Hồ sơ địa chính được tập hợp theo đơn vị hành chính cấp xã hoặc theo đơn vị hành chính cấp huyện nơi không thành lập đơn vị hành chính cấp xã.",
+          "source_article": "Điều 128, Khoản 1",
+          "id": 7
+        },
+        {
+          "question": "Hồ sơ địa chính dạng số bao gồm những tài liệu gì?",
+          "ground_truth": "Hồ sơ địa chính được lập dưới dạng số, bao gồm các tài liệu sau đây: Bản đồ địa chính; Sổ mục kê đất đai; Sổ địa chính; Bản sao các loại giấy chứng nhận.",
+          "source_article": "Điều 129, Khoản 2",
+          "id": 8
+        },
+        {
+          "question": "Việc đăng ký đất đai có bắt buộc không?",
+          "ground_truth": "Đăng ký đất đai là bắt buộc đối với người sử dụng đất và người được giao đất để quản lý.",
+          "source_article": "Điều 131, Khoản 1",
+          "id": 9
+        },
+        {
+          "question": "Trong trường hợp chuyển nhượng hoặc thừa kế quyền sử dụng đất, thời hạn người sử dụng đất phải đăng ký biến động là bao lâu?",
+          "ground_truth": "Trong thời hạn 30 ngày kể từ ngày có biến động, người sử dụng đất phải đăng ký biến động tại cơ quan có thẩm quyền.",
+          "source_article": "Điều 133, Khoản 3",
+          "id": 10
+        },
+        {
+          "question": "Khi quyền sử dụng đất là tài sản chung của vợ và chồng, việc ghi tên trên Giấy chứng nhận được quy định ra sao?",
+          "ground_truth": "Phải ghi cả họ, tên vợ và họ, tên chồng vào Giấy chứng nhận quyền sử dụng đất, quyền sở hữu tài sản gắn liền với đất, trừ trường hợp vợ và chồng có thỏa thuận ghi tên một người để đứng tên làm đại diện cho vợ và chồng.",
+          "source_article": "Điều 135, Khoản 4",
+          "id": 11
+        },
+        {
+          "question": "Cơ quan nào có thẩm quyền cấp Giấy chứng nhận quyền sử dụng đất lần đầu cho cá nhân trong nước?",
+          "ground_truth": "Ủy ban nhân dân cấp huyện cấp Giấy chứng nhận quyền sử dụng đất, quyền sở hữu tài sản gắn liền với đất cho người sử dụng đất, chủ sở hữu tài sản gắn liền với đất là cá nhân.",
+          "source_article": "Điều 136, Khoản 1, Điểm b",
+          "id": 12
+        },
+        {
+          "question": "Dự án xây dựng khu đô thị có nhiều hạng mục công trình hoặc phần diện tích có mục đích sử dụng đất khác nhau thì cấp Giấy chứng nhận như thế nào?",
+          "ground_truth": "Việc cấp Giấy chứng nhận quyền sử dụng đất, quyền sở hữu tài sản gắn liền với đất được thực hiện đối với từng thửa đất sử dụng vào mỗi mục đích, phù hợp với quy hoạch xây dựng chi tiết đã được cơ quan có thẩm quyền phê duyệt.",
+          "source_article": "Điều 143, Khoản 1, Điểm a",
+          "id": 13
+        },
+        {
+          "question": "Nhà ở hoặc công trình xây dựng tạm thời bằng tranh, tre, nứa, lá có được cấp Giấy chứng nhận quyền sở hữu không?",
+          "ground_truth": "Không. Các tài sản gắn liền với đất không được cấp Giấy chứng nhận quyền sử dụng đất, quyền sở hữu tài sản gắn liền với đất trong trường hợp nhà ở hoặc công trình xây dựng được xây dựng tạm thời trong thời gian xây dựng công trình chính hoặc xây dựng tạm thời bằng vật liệu tranh, tre, nứa, lá, đất.",
+          "source_article": "Điều 151, Khoản 2, Điểm b",
+          "id": 14
+        },
+        {
+          "question": "Cơ quan nào có trách nhiệm đính chính Giấy chứng nhận quyền sử dụng đất đã cấp nếu có sai sót?",
+          "ground_truth": "Cơ quan có thẩm quyền cấp Giấy chứng nhận quyền sử dụng đất, quyền sở hữu tài sản gắn liền với đất quy định tại Điều 136 của Luật này có trách nhiệm đính chính giấy chứng nhận đã cấp có sai sót.",
+          "source_article": "Điều 152, Khoản 1",
+          "id": 15
+        },
+        {
+          "question": "Tiền thuê đất hằng năm được áp dụng ổn định cho chu kỳ bao nhiêu năm?",
+          "ground_truth": "Tiền thuê đất hằng năm được áp dụng ổn định cho chu kỳ 05 năm tính từ thời điểm Nhà nước quyết định cho thuê đất.",
+          "source_article": "Điều 153, Khoản 2",
+          "id": 16
+        },
+        {
+          "question": "Luật Đất đai quy định các phương pháp định giá đất nào?",
+          "ground_truth": "Các phương pháp định giá đất bao gồm: Phương pháp so sánh, Phương pháp thu nhập, Phương pháp thặng dư, và Phương pháp hệ số điều chỉnh giá đất.",
+          "source_article": "Điều 158, Khoản 5",
+          "id": 17
+        },
+        {
+          "question": "Phương pháp so sánh trong định giá đất được áp dụng trong điều kiện nào?",
+          "ground_truth": "Phương pháp so sánh được áp dụng để định giá đối với trường hợp có tối thiểu 03 thửa đất có cùng mục đích sử dụng đất, tương đồng nhất định về các yếu tố có ảnh hưởng đến giá đất đã chuyển nhượng trên thị trường, trúng đấu giá quyền sử dụng đất mà người trúng đấu giá đã hoàn thành nghĩa vụ tài chính.",
+          "source_article": "Điều 158, Khoản 6, Điểm a",
+          "id": 18
+        },
+        {
+          "question": "Bảng giá đất lần đầu theo quy định mới sẽ được công bố và áp dụng từ ngày tháng năm nào?",
+          "ground_truth": "Bảng giá đất lần đầu để công bố và áp dụng từ ngày 01 tháng 01 năm 2026.",
+          "source_article": "Điều 159, Khoản 3",
+          "id": 19
+        },
+        {
+          "question": "Chủ tịch Ủy ban nhân dân cấp tỉnh có thẩm quyền quyết định giá đất cụ thể đối với các trường hợp nào?",
+          "ground_truth": "Chủ tịch Ủy ban nhân dân cấp tỉnh quyết định giá đất cụ thể đối với trường hợp giao đất, cho thuê đất, cho phép chuyển mục đích sử dụng đất, công nhận quyền sử dụng đất, gia hạn sử dụng đất, điều chỉnh thời hạn sử dụng đất, điều chỉnh quy hoạch xây dựng chi tiết, thu hồi đất, xác định giá khởi điểm đấu giá quyền sử dụng đất, xác định giá trị quyền sử dụng đất khi cổ phần hóa doanh nghiệp thuộc thẩm quyền của Ủy ban nhân dân cấp tỉnh.",
+          "source_article": "Điều 160, Khoản 2, Điểm a",
+          "id": 20
+        },
+        {
+          "question": "Hội đồng thẩm định bảng giá đất cấp tỉnh bao gồm những thành phần nào?",
+          "ground_truth": "Bao gồm Chủ tịch Ủy ban nhân dân cấp tỉnh hoặc 01 Phó Chủ tịch Ủy ban nhân dân cấp tỉnh làm Chủ tịch Hội đồng, Thủ trưởng cơ quan tài chính cấp tỉnh làm Phó Chủ tịch Hội đồng, các thành viên Ủy ban nhân dân cấp tỉnh là thủ trưởng các cơ quan chuyên môn cấp tỉnh; các Chủ tịch Ủy ban nhân dân cấp huyện; đại diện của cơ quan, tổ chức có liên quan, tổ chức tư vấn xác định giá đất và chuyên gia.",
+          "source_article": "Điều 161, Khoản 1",
+          "id": 21
+        },
+        {
+          "question": "Hệ thống thông tin quốc gia về đất đai bao gồm các thành phần cơ bản nào?",
+          "ground_truth": "Bao gồm: Hạ tầng kỹ thuật công nghệ thông tin; Phần mềm của Hệ thống thông tin quốc gia về đất đai; Cơ sở dữ liệu quốc gia về đất đai.",
+          "source_article": "Điều 163, Khoản 3",
+          "id": 22
+        },
+        {
+          "question": "Người sử dụng đất có được phép khai thác thông tin của mình trong cơ sở dữ liệu quốc gia về đất đai không?",
+          "ground_truth": "Người sử dụng đất được khai thác thông tin của mình trong cơ sở dữ liệu quốc gia về đất đai.",
+          "source_article": "Điều 166, Khoản 5, Điểm c",
+          "id": 23
+        },
+        {
+          "question": "Giao dịch điện tử về đất đai được thực hiện theo quy định của pháp luật nào?",
+          "ground_truth": "Giao dịch điện tử về đất đai được thực hiện theo quy định của pháp luật về giao dịch điện tử.",
+          "source_article": "Điều 167, Khoản 2",
+          "id": 24
+        },
+        {
+          "question": "Kinh phí xây dựng, quản lý, vận hành và nâng cấp hệ thống thông tin quốc gia về đất đai được lấy từ đâu?",
+          "ground_truth": "Kinh phí xây dựng, quản lý, vận hành, bảo trì, nâng cấp hệ thống thông tin quốc gia về đất đai được sử dụng từ nguồn ngân sách nhà nước và các nguồn khác theo quy định của pháp luật.",
+          "source_article": "Điều 168, Khoản 1",
+          "id": 25
+        }
+      ]
+    },
+    {
+      "law_name": "Luật Trật tự, an toàn giao thông đường bộ 2024",
+      "file_path": "Luật-36-2024-QH15.docx",
+      "total_questions": 25,
+      "qa_pairs": [
+        {
+          "question": "Phạm vi điều chỉnh của Luật Trật tự, an toàn giao thông đường bộ là gì?",
+          "ground_truth": "Luật này quy định về quy tắc, phương tiện, người tham gia giao thông đường bộ, chỉ huy, điều khiển, tuần tra, kiểm soát, giải quyết tai nạn giao thông đường bộ, trách nhiệm quản lý nhà nước và trách nhiệm của cơ quan, tổ chức, cá nhân có liên quan đến trật tự, an toàn giao thông đường bộ.",
+          "source_article": "Điều 1",
+          "id": 1
+        },
+        {
+          "question": "Trật tự, an toàn giao thông đường bộ được hiểu như thế nào?",
+          "ground_truth": "Trật tự, an toàn giao thông đường bộ là trạng thái giao thông trên đường bộ có trật tự, bảo đảm an toàn, thông suốt; được hình thành và điều chỉnh bởi các quy tắc, nguyên tắc, quy phạm pháp luật trong lĩnh vực giao thông đường bộ.",
+          "source_article": "Điều 2, Khoản 1",
+          "id": 2
+        },
+        {
+          "question": "Phương tiện giao thông đường bộ bao gồm những loại xe nào?",
+          "ground_truth": "Phương tiện giao thông đường bộ là các loại xe, bao gồm: phương tiện giao thông cơ giới đường bộ (sau đây gọi là xe cơ giới), phương tiện giao thông thô sơ đường bộ (sau đây gọi là xe thô sơ), xe máy chuyên dùng và các loại xe tương tự.",
+          "source_article": "Điều 2, Khoản 2",
+          "id": 3
+        },
+        {
+          "question": "Phần đường xe chạy là gì?",
+          "ground_truth": "Phần đường xe chạy là phần của đường bộ được sử dụng cho phương tiện giao thông đường bộ đi lại.",
+          "source_article": "Điều 2, Khoản 5",
+          "id": 4
+        },
+        {
+          "question": "Ùn tắc giao thông đường bộ là gì?",
+          "ground_truth": "Ùn tắc giao thông đường bộ là tình trạng người, phương tiện tham gia giao thông đường bộ bị dồn ứ, di chuyển với tốc độ rất chậm hoặc không thể di chuyển được.",
+          "source_article": "Điều 2, Khoản 11",
+          "id": 5
+        },
+        {
+          "question": "Nguyên tắc tuân thủ pháp luật đối với người tham gia giao thông là gì?",
+          "ground_truth": "Người tham gia giao thông đường bộ phải chấp hành các quy định của pháp luật về trật tự, an toàn giao thông đường bộ và quy định khác của pháp luật có liên quan, có trách nhiệm giữ an toàn cho mình và cho người khác.",
+          "source_article": "Điều 3, Khoản 4",
+          "id": 6
+        },
+        {
+          "question": "Cơ sở dữ liệu về trật tự, an toàn giao thông đường bộ có được kết nối và chia sẻ với cơ sở dữ liệu nào không?",
+          "ground_truth": "Cơ sở dữ liệu về trật tự, an toàn giao thông đường bộ là cơ sở dữ liệu dùng chung; được kết nối, chia sẻ với Cơ sở dữ liệu quốc gia về dân cư, Cơ sở dữ liệu đường bộ và các cơ sở dữ liệu khác có liên quan.",
+          "source_article": "Điều 7, Khoản 2",
+          "id": 7
+        },
+        {
+          "question": "Hành vi lái xe khi có nồng độ cồn có bị nghiêm cấm không?",
+          "ground_truth": "Nghiêm cấm điều khiển phương tiện tham gia giao thông đường bộ mà trong máu hoặc hơi thở có nồng độ cồn.",
+          "source_article": "Điều 9, Khoản 2",
+          "id": 8
+        },
+        {
+          "question": "Sử dụng điện thoại di động khi đang điều khiển xe đang di chuyển có vi phạm pháp luật không?",
+          "ground_truth": "Nghiêm cấm dùng tay cầm và sử dụng điện thoại hoặc thiết bị điện tử khác khi điều khiển phương tiện tham gia giao thông đang di chuyển trên đường bộ.",
+          "source_article": "Điều 9, Khoản 6",
+          "id": 9
+        },
+        {
+          "question": "Trẻ em dưới độ tuổi và chiều cao nào thì không được ngồi cùng hàng ghế với người lái xe ô tô?",
+          "ground_truth": "Khi chở trẻ em dưới 10 tuổi và chiều cao dưới 1,35 mét trên xe ô tô không được cho trẻ em ngồi cùng hàng ghế với người lái xe, trừ loại xe ô tô chỉ có một hàng ghế.",
+          "source_article": "Điều 10, Khoản 3",
+          "id": 10
+        },
+        {
+          "question": "Tín hiệu đèn giao thông màu vàng có ý nghĩa gì?",
+          "ground_truth": "Tín hiệu đèn màu vàng phải dừng lại trước vạch dừng; trường hợp đang đi trên vạch dừng hoặc đã đi qua vạch dừng mà tín hiệu đèn màu vàng thì được đi tiếp; trường hợp tín hiệu đèn màu vàng nhấp nháy, người điều khiển phương tiện được đi nhưng phải quan sát, giảm tốc độ hoặc dừng lại nhường đường.",
+          "source_article": "Điều 11, Khoản 4, Điểm b",
+          "id": 11
+        },
+        {
+          "question": "Khi muốn vượt xe, người lái xe phải sử dụng loại tín hiệu nào?",
+          "ground_truth": "Xe xin vượt phải có báo hiệu nhấp nháy bằng đèn chiếu sáng phía trước hoặc còi, trừ loại xe thô sơ không có đèn chiếu sáng và còi.",
+          "source_article": "Điều 14, Khoản 5",
+          "id": 12
+        },
+        {
+          "question": "Quy tắc nhường đường tại nơi giao nhau không có báo hiệu đi theo vòng xuyến là gì?",
+          "ground_truth": "Tại nơi đường giao nhau không có báo hiệu đi theo vòng xuyến, phải nhường đường cho xe đi đến từ bên phải.",
+          "source_article": "Điều 22, Khoản 2",
+          "id": 13
+        },
+        {
+          "question": "Khi xuống phà, đối tượng nào được ưu tiên xuống trước?",
+          "ground_truth": "Khi xuống phà, xe cơ giới, xe máy chuyên dùng xuống trước, xe thô sơ, người đi bộ xuống sau.",
+          "source_article": "Điều 23, Khoản 3, Điểm b",
+          "id": 14
+        },
+        {
+          "question": "Xe máy chuyên dùng có tốc độ thiết kế thấp có được chạy trên đường cao tốc không?",
+          "ground_truth": "Xe máy chuyên dùng có tốc độ thiết kế nhỏ hơn tốc độ tối thiểu quy định đối với đường cao tốc không được đi trên đường cao tốc, trừ thiết bị phục vụ việc quản lý, bảo trì đường cao tốc.",
+          "source_article": "Điều 25, Khoản 3",
+          "id": 15
+        },
+        {
+          "question": "Khi đi trong hầm đường bộ, việc sử dụng đèn được quy định như thế nào đối với xe cơ giới?",
+          "ground_truth": "Xe cơ giới, xe máy chuyên dùng phải bật đèn chiếu gần.",
+          "source_article": "Điều 26, Khoản 1",
+          "id": 16
+        },
+        {
+          "question": "Các loại xe nào được xếp vào nhóm xe ưu tiên khi tham gia giao thông?",
+          "ground_truth": "Xe ưu tiên gồm xe chữa cháy; xe của lực lượng quân sự, công an và kiểm sát đi làm nhiệm vụ khẩn cấp; đoàn xe có xe Cảnh sát giao thông dẫn đường; xe cứu thương; xe hộ đê; xe đi làm nhiệm vụ cứu nạn, cứu hộ, khắc phục sự cố thiên tai, dịch bệnh hoặc trong tình trạng khẩn cấp; đoàn xe tang.",
+          "source_article": "Điều 27, Khoản 1",
+          "id": 17
+        },
+        {
+          "question": "Người đi bộ muốn qua đường phải tuân thủ quy định gì?",
+          "ground_truth": "Chỉ được qua đường ở những nơi có đèn tín hiệu, có vạch kẻ đường hoặc có cầu vượt, hầm dành cho người đi bộ và phải tuân thủ tín hiệu chỉ dẫn, báo hiệu đường bộ.",
+          "source_article": "Điều 30, Khoản 1, Điểm b",
+          "id": 18
+        },
+        {
+          "question": "Người điều khiển xe đạp được phép chở tối đa bao nhiêu người?",
+          "ground_truth": "Người điều khiển xe đạp, xe đạp máy chỉ được chở một người, trừ trường hợp chở thêm một trẻ em dưới 07 tuổi thì được chở tối đa hai người.",
+          "source_article": "Điều 31, Khoản 1",
+          "id": 19
+        },
+        {
+          "question": "Độ tuổi tối thiểu để được điều khiển xe gắn máy là bao nhiêu?",
+          "ground_truth": "Người đủ 16 tuổi trở lên được điều khiển xe gắn máy.",
+          "source_article": "Điều 59, Khoản 1, Điểm a",
+          "id": 20
+        },
+        {
+          "question": "Giấy phép lái xe hạng B được cấp cho những đối tượng nào?",
+          "ground_truth": "Hạng B cấp cho người lái xe ô tô chở người đến 08 chỗ (không kể chỗ của người lái xe); xe ô tô tải và ô tô chuyên dùng có khối lượng toàn bộ theo thiết kế đến 3.500 kg; các loại xe ô tô quy định cho giấy phép lái xe hạng B kéo rơ moóc có khối lượng toàn bộ theo thiết kế đến 750 kg.",
+          "source_article": "Điều 57, Khoản 1, Điểm d",
+          "id": 21
+        },
+        {
+          "question": "Thời hạn sử dụng của giấy phép lái xe hạng B và hạng C1 là bao nhiêu năm?",
+          "ground_truth": "Giấy phép lái xe hạng B và hạng C1 có thời hạn 10 năm kể từ ngày cấp.",
+          "source_article": "Điều 57, Khoản 5, Điểm b",
+          "id": 22
+        },
+        {
+          "question": "Giấy phép lái xe có hệ thống quản lý bằng bao nhiêu điểm?",
+          "ground_truth": "Điểm của giấy phép lái xe được dùng để quản lý việc chấp hành pháp luật về trật tự, an toàn giao thông đường bộ của người lái xe trên hệ thống cơ sở dữ liệu về trật tự, an toàn giao thông đường bộ, bao gồm 12 điểm.",
+          "source_article": "Điều 58, Khoản 1",
+          "id": 23
+        },
+        {
+          "question": "Thời gian lái xe tối đa của một người lái xe ô tô kinh doanh vận tải trong một ngày là bao nhiêu?",
+          "ground_truth": "Thời gian lái xe của người lái xe ô tô không quá 10 giờ trong một ngày và không quá 48 giờ trong một tuần; lái xe liên tục không quá 04 giờ.",
+          "source_article": "Điều 64, Khoản 1",
+          "id": 24
+        },
+        {
+          "question": "Khi gây ra vụ tai nạn giao thông, người điều khiển phương tiện có được phép tự ý rời khỏi hiện trường không?",
+          "ground_truth": "Phải ở lại hiện trường vụ tai nạn giao thông đường bộ cho đến khi người của cơ quan Công an đến, trừ trường hợp phải đi cấp cứu, đưa người bị nạn đi cấp cứu hoặc xét thấy bị đe dọa đến tính mạng, sức khỏe nhưng phải đến trình báo ngay cơ quan Công an, Ủy ban nhân dân nơi gần nhất.",
+          "source_article": "Điều 80, Khoản 1, Điểm b",
+          "id": 25
+        }
+      ]
+    },
+    {
+      "law_name": "Bộ luật Dân sự 2015",
+      "file_path": "1_Bo_Luat_Dan_Su_2015.pdf",
+      "total_questions": 25,
+      "qa_pairs": [
+        {
+          "question": "Phạm vi điều chỉnh của Bộ luật dân sự là gì?",
+          "ground_truth": "Bộ luật này quy định địa vị pháp lý, chuẩn mực pháp lý về cách ứng xử của cá nhân, pháp nhân; quyền, nghĩa vụ về nhân thân và tài sản của cá nhân, pháp nhân trong các quan hệ được hình thành trên cơ sở bình đẳng, tự do ý chí, độc lập về tài sản và tự chịu trách nhiệm.",
+          "source_article": "Điều 1",
+          "id": 1
+        },
+        {
+          "question": "Quyền dân sự chỉ có thể bị hạn chế trong trường hợp nào?",
+          "ground_truth": "Quyền dân sự chỉ có thể bị hạn chế theo quy định của luật trong trường hợp cần thiết vì lý do quốc phòng, an ninh quốc gia, trật tự, an toàn xã hội, đạo đức xã hội, sức khỏe của cộng đồng.",
+          "source_article": "Điều 2, Khoản 2",
+          "id": 2
+        },
+        {
+          "question": "Năng lực pháp luật dân sự của cá nhân có từ khi nào và chấm dứt khi nào?",
+          "ground_truth": "Năng lực pháp luật dân sự của cá nhân có từ khi người đó sinh ra và chấm dứt khi người đó chết.",
+          "source_article": "Điều 16, Khoản 3",
+          "id": 3
+        },
+        {
+          "question": "Người thành niên được quy định là người như thế nào?",
+          "ground_truth": "Người thành niên là người từ đủ mười tám tuổi trở lên.",
+          "source_article": "Điều 20, Khoản 1",
+          "id": 4
+        },
+        {
+          "question": "Giao dịch dân sự của người chưa đủ sáu tuổi do ai xác lập, thực hiện?",
+          "ground_truth": "Giao dịch dân sự của người chưa đủ sáu tuổi do người đại diện theo pháp luật của người đó xác lập, thực hiện.",
+          "source_article": "Điều 21, Khoản 2",
+          "id": 5
+        },
+        {
+          "question": "Việc thay đổi họ cho người từ đủ chín tuổi trở lên có cần sự đồng ý của người đó không?",
+          "ground_truth": "Việc thay đổi họ cho người từ đủ chín tuổi trở lên phải có sự đồng ý của người đó.",
+          "source_article": "Điều 27, Khoản 2",
+          "id": 6
+        },
+        {
+          "question": "Trẻ em sinh ra mà sống được bao lâu thì phải được khai sinh và khai tử nếu sau đó chết?",
+          "ground_truth": "Trẻ em sinh ra mà sống được từ hai mươi bốn giờ trở lên mới chết thì phải được khai sinh và khai tử.",
+          "source_article": "Điều 30, Khoản 3",
+          "id": 7
+        },
+        {
+          "question": "Nơi cư trú của cá nhân là ở đâu?",
+          "ground_truth": "Nơi cư trú của cá nhân là nơi người đó thường xuyên sinh sống.",
+          "source_article": "Điều 40, Khoản 1",
+          "id": 8
+        },
+        {
+          "question": "Nơi cư trú của vợ, chồng được quy định như thế nào?",
+          "ground_truth": "Nơi cư trú của vợ, chồng là nơi vợ, chồng thường xuyên chung sống.",
+          "source_article": "Điều 43, Khoản 1",
+          "id": 9
+        },
+        {
+          "question": "Khi một người biệt tích bao lâu thì Tòa án có thể tuyên bố người đó mất tích?",
+          "ground_truth": "Khi một người biệt tích 02 năm liền trở lên, mặc dù đã áp dụng đầy đủ các biện pháp thông báo, tìm kiếm theo quy định của pháp luật về tố tụng dân sự nhưng vẫn không có tin tức xác thực về việc người đó còn sống hay đã chết thì theo yêu cầu của người có quyền, lợi ích liên quan, Tòa án có thể tuyên bố người đó mất tích.",
+          "source_article": "Điều 68, Khoản 1",
+          "id": 10
+        },
+        {
+          "question": "Tài sản bao gồm những loại nào?",
+          "ground_truth": "Tài sản là vật, tiền, giấy tờ có giá và quyền tài sản. Tài sản bao gồm bất động sản và động sản.",
+          "source_article": "Điều 105",
+          "id": 11
+        },
+        {
+          "question": "Bất động sản bao gồm những gì?",
+          "ground_truth": "Bất động sản bao gồm: Đất đai; Nhà, công trình xây dựng gắn liền với đất đai; Tài sản khác gắn liền với đất đai, nhà, công trình xây dựng; Tài sản khác theo quy định của pháp luật.",
+          "source_article": "Điều 107, Khoản 1",
+          "id": 12
+        },
+        {
+          "question": "Giao dịch dân sự là gì?",
+          "ground_truth": "Giao dịch dân sự là hợp đồng hoặc hành vi pháp lý đơn phương làm phát sinh, thay đổi hoặc chấm dứt quyền, nghĩa vụ dân sự.",
+          "source_article": "Điều 116",
+          "id": 13
+        },
+        {
+          "question": "Điều kiện có hiệu lực của giao dịch dân sự là gì?",
+          "ground_truth": "Giao dịch dân sự có hiệu lực khi có đủ các điều kiện sau: Chủ thể có năng lực pháp luật dân sự, năng lực hành vi dân sự phù hợp với giao dịch dân sự được xác lập; Chủ thể tham gia giao dịch dân sự hoàn toàn tự nguyện; Mục đích và nội dung của giao dịch dân sự không vi phạm điều cấm của luật, không trái đạo đức xã hội.",
+          "source_article": "Điều 117, Khoản 1",
+          "id": 14
+        },
+        {
+          "question": "Thời hiệu yêu cầu Tòa án tuyên bố giao dịch dân sự vô hiệu đối với trường hợp bị nhầm lẫn, lừa dối là bao lâu?",
+          "ground_truth": "Thời hiệu yêu cầu Tòa án tuyên bố giao dịch dân sự vô hiệu là 02 năm.",
+          "source_article": "Điều 132, Khoản 1",
+          "id": 15
+        },
+        {
+          "question": "Đại diện là gì?",
+          "ground_truth": "Đại diện là việc cá nhân, pháp nhân nhân danh và vì lợi ích của cá nhân hoặc pháp nhân khác xác lập, thực hiện giao dịch dân sự.",
+          "source_article": "Điều 134, Khoản 1",
+          "id": 16
+        },
+        {
+          "question": "Thời gian không tính vào thời hiệu khởi kiện vụ án dân sự là khoảng thời gian nào?",
+          "ground_truth": "Thời gian không tính vào thời hiệu khởi kiện vụ án dân sự là khoảng thời gian xảy ra một trong các sự kiện: Sự kiện bất khả kháng hoặc trở ngại khách quan; Chưa có người đại diện đối với người chưa thành niên, mất năng lực hành vi dân sự...; Người đại diện chưa có người thay thế khi người đại diện chết hoặc không thể tiếp tục đại diện.",
+          "source_article": "Điều 156",
+          "id": 17
+        },
+        {
+          "question": "Quyền sở hữu bao gồm những quyền gì?",
+          "ground_truth": "Quyền sở hữu bao gồm quyền chiếm hữu, quyền sử dụng và quyền định đoạt tài sản của chủ sở hữu theo quy định của luật.",
+          "source_article": "Điều 158",
+          "id": 18
+        },
+        {
+          "question": "Chiếm hữu ngay tình là gì?",
+          "ground_truth": "Chiếm hữu ngay tình là việc chiếm hữu mà người chiếm hữu có căn cứ để tin rằng mình có quyền đối với tài sản đang chiếm hữu.",
+          "source_article": "Điều 180",
+          "id": 19
+        },
+        {
+          "question": "Tài sản thuộc sở hữu toàn dân bao gồm những tài sản nào?",
+          "ground_truth": "Đất đai, tài nguyên nước, tài nguyên khoáng sản, nguồn lợi ở vùng biển, vùng trời, tài nguyên thiên nhiên khác và các tài sản do Nhà nước đầu tư, quản lý là tài sản công thuộc sở hữu toàn dân.",
+          "source_article": "Điều 197",
+          "id": 20
+        },
+        {
+          "question": "Thời hạn xác lập quyền sở hữu theo thời hiệu do chiếm hữu, được lợi về tài sản không có căn cứ pháp luật nhưng ngay tình, liên tục, công khai là bao lâu?",
+          "ground_truth": "Trong thời hạn 10 năm đối với động sản, 30 năm đối với bất động sản.",
+          "source_article": "Điều 236",
+          "id": 21
+        },
+        {
+          "question": "Quyền hưởng dụng là gì?",
+          "ground_truth": "Quyền hưởng dụng là quyền của chủ thể được khai thác công dụng và hưởng hoa lợi, lợi tức đối với tài sản thuộc quyền sở hữu của chủ thể khác trong một thời hạn nhất định.",
+          "source_article": "Điều 257",
+          "id": 22
+        },
+        {
+          "question": "Nghĩa vụ là gì?",
+          "ground_truth": "Nghĩa vụ là việc mà theo đó, một hoặc nhiều chủ thể phải chuyển giao vật, chuyển giao quyền, trả tiền hoặc giấy tờ có giá, thực hiện công việc hoặc không được thực hiện công việc nhất định vì lợi ích của một hoặc nhiều chủ thể khác.",
+          "source_article": "Điều 274",
+          "id": 23
+        },
+        {
+          "question": "Các biện pháp bảo đảm thực hiện nghĩa vụ bao gồm những biện pháp nào?",
+          "ground_truth": "Các biện pháp bảo đảm thực hiện nghĩa vụ bao gồm: Cầm cố tài sản, Thế chấp tài sản, Đặt cọc, Ký cược, Ký quỹ, Bảo lưu quyền sở hữu, Bảo lãnh, Tín chấp, Cầm giữ tài sản.",
+          "source_article": "Điều 292",
+          "id": 24
+        },
+        {
+          "question": "Đặt cọc là gì?",
+          "ground_truth": "Đặt cọc là việc một bên giao cho bên kia một khoản tiền hoặc kim khí quý, đá quý hoặc vật có giá trị khác trong một thời hạn để bảo đảm giao kết hoặc thực hiện hợp đồng.",
+          "source_article": "Điều 328, Khoản 1",
+          "id": 25
+        }
+      ]
+    },
+    {
+      "law_name": "Văn bản hợp nhất Bộ luật Hình sự năm 2025",
+      "file_path": "P1 VB-Hop-nhat-BLHS-2025.pdf",
+      "total_questions": 25,
+      "qa_pairs": [
+        {
+          "question": "Nhiệm vụ của Bộ luật hình sự là gì?",
+          "ground_truth": "Bộ luật hình sự có nhiệm vụ bảo vệ chủ quyền quốc gia, an ninh của đất nước, bảo vệ chế độ xã hội chủ nghĩa, quyền con người, quyền công dân, bảo vệ quyền bình đẳng giữa đồng bào các dân tộc, bảo vệ lợi ích của Nhà nước, tổ chức, bảo vệ trật tự pháp luật, chống mọi hành vi phạm tội; giáo dục mọi người ý thức tuân theo pháp luật, phòng ngừa và đấu tranh chống tội phạm.",
+          "source_article": "Điều 1",
+          "id": 1
+        },
+        {
+          "question": "Cơ sở của trách nhiệm hình sự được quy định như thế nào?",
+          "ground_truth": "Chỉ người nào phạm một tội đã được Bộ luật hình sự quy định mới phải chịu trách nhiệm hình sự. Chỉ pháp nhân thương mại nào phạm một tội đã được quy định tại Điều 76 của Bộ luật này mới phải chịu trách nhiệm hình sự.",
+          "source_article": "Điều 2",
+          "id": 2
+        },
+        {
+          "question": "Tội phạm được phân thành mấy loại?",
+          "ground_truth": "Căn cứ vào tính chất và mức độ nguy hiểm cho xã hội của hành vi phạm tội, tội phạm được phân thành 04 loại: Tội phạm ít nghiêm trọng, Tội phạm nghiêm trọng, Tội phạm rất nghiêm trọng và Tội phạm đặc biệt nghiêm trọng.",
+          "source_article": "Điều 9, Khoản 1",
+          "id": 3
+        },
+        {
+          "question": "Tội phạm ít nghiêm trọng là gì?",
+          "ground_truth": "Tội phạm ít nghiêm trọng là tội phạm có tính chất và mức độ nguy hiểm cho xã hội không lớn mà mức cao nhất của khung hình phạt do Bộ luật này quy định đối với tội ấy là phạt tiền, phạt cải tạo không giam giữ hoặc phạt tù đến 03 năm.",
+          "source_article": "Điều 9, Khoản 1, Điểm a",
+          "id": 4
+        },
+        {
+          "question": "Tội phạm đặc biệt nghiêm trọng là gì?",
+          "ground_truth": "Tội phạm đặc biệt nghiêm trọng là tội phạm có tính chất và mức độ nguy hiểm cho xã hội đặc biệt lớn mà mức cao nhất của khung hình phạt do Bộ luật này quy định đối với tội ấy là từ trên 15 năm tù đến 20 năm tù, tù chung thân hoặc tử hình.",
+          "source_article": "Điều 9, Khoản 1, Điểm d",
+          "id": 5
+        },
+        {
+          "question": "Cố ý phạm tội là gì?",
+          "ground_truth": "Cố ý phạm tội là trường hợp người phạm tội nhận thức rõ hành vi của mình là nguy hiểm cho xã hội, thấy trước hậu quả của hành vi đó và mong muốn hậu quả xảy ra; hoặc thấy trước hậu quả của hành vi đó có thể xảy ra, tuy không mong muốn nhưng vẫn có ý thức để mặc cho hậu quả xảy ra.",
+          "source_article": "Điều 10",
+          "id": 6
+        },
+        {
+          "question": "Người từ đủ 16 tuổi trở lên phải chịu trách nhiệm hình sự như thế nào?",
+          "ground_truth": "Người từ đủ 16 tuổi trở lên phải chịu trách nhiệm hình sự về mọi tội phạm, trừ những tội phạm mà Bộ luật này có quy định khác.",
+          "source_article": "Điều 12, Khoản 1",
+          "id": 7
+        },
+        {
+          "question": "Phạm tội do dùng rượu, bia hoặc chất kích thích mạnh khác có được miễn trách nhiệm hình sự không?",
+          "ground_truth": "Người phạm tội trong tình trạng mất khả năng nhận thức hoặc khả năng điều khiển hành vi của mình do dùng rượu, bia hoặc chất kích thích mạnh khác, thì vẫn phải chịu trách nhiệm hình sự.",
+          "source_article": "Điều 13",
+          "id": 8
+        },
+        {
+          "question": "Phạm tội chưa đạt là gì?",
+          "ground_truth": "Phạm tội chưa đạt là cố ý thực hiện tội phạm nhưng không thực hiện được đến cùng vì những nguyên nhân ngoài ý muốn của người phạm tội.",
+          "source_article": "Điều 15",
+          "id": 9
+        },
+        {
+          "question": "Tự ý nửa chừng chấm dứt việc phạm tội là gì?",
+          "ground_truth": "Tự ý nửa chừng chấm dứt việc phạm tội là tự mình không thực hiện tội phạm đến cùng, tuy không có gì ngăn cản.",
+          "source_article": "Điều 16",
+          "id": 10
+        },
+        {
+          "question": "Đồng phạm là gì?",
+          "ground_truth": "Đồng phạm là trường hợp có hai người trở lên cố ý cùng thực hiện một tội phạm.",
+          "source_article": "Điều 17, Khoản 1",
+          "id": 11
+        },
+        {
+          "question": "Phạm tội có tổ chức là gì?",
+          "ground_truth": "Phạm tội có tổ chức là hình thức đồng phạm có sự câu kết chặt chẽ giữa những người cùng thực hiện tội phạm.",
+          "source_article": "Điều 17, Khoản 2",
+          "id": 12
+        },
+        {
+          "question": "Người đồng phạm bao gồm những ai?",
+          "ground_truth": "Người đồng phạm bao gồm người tổ chức, người thực hành, người xúi giục, người giúp sức.",
+          "source_article": "Điều 17, Khoản 3",
+          "id": 13
+        },
+        {
+          "question": "Phòng vệ chính đáng là gì?",
+          "ground_truth": "Phòng vệ chính đáng là hành vi của người vì bảo vệ quyền hoặc lợi ích chính đáng của mình, của người khác hoặc lợi ích của Nhà nước, của cơ quan, tổ chức mà chống trả lại một cách cần thiết người đang có hành vi xâm phạm các lợi ích nói trên. Phòng vệ chính đáng không phải là tội phạm.",
+          "source_article": "Điều 22, Khoản 1",
+          "id": 14
+        },
+        {
+          "question": "Tình thế cấp thiết là gì?",
+          "ground_truth": "Tình thế cấp thiết là tình thế của người vì muốn tránh gây thiệt hại cho quyền, lợi ích hợp pháp của mình, của người khác hoặc lợi ích của Nhà nước, của cơ quan, tổ chức mà không còn cách nào khác là phải gây một thiệt hại nhỏ hơn thiệt hại cần ngăn ngừa.",
+          "source_article": "Điều 23, Khoản 1",
+          "id": 15
+        },
+        {
+          "question": "Thời hiệu truy cứu trách nhiệm hình sự đối với tội phạm ít nghiêm trọng là bao lâu?",
+          "ground_truth": "Thời hiệu truy cứu trách nhiệm hình sự đối với tội phạm ít nghiêm trọng là 05 năm.",
+          "source_article": "Điều 27, Khoản 2, Điểm a",
+          "id": 16
+        },
+        {
+          "question": "Hình phạt chính đối với người phạm tội bao gồm những hình phạt nào?",
+          "ground_truth": "Hình phạt chính bao gồm: Cảnh cáo; Phạt tiền; Cải tạo không giam giữ; Trục xuất; Tù có thời hạn; Tù chung thân; Tử hình.",
+          "source_article": "Điều 32, Khoản 1",
+          "id": 17
+        },
+        {
+          "question": "Hình phạt bổ sung đối với người phạm tội bao gồm những hình phạt nào?",
+          "ground_truth": "Hình phạt bổ sung bao gồm: Cấm đảm nhiệm chức vụ, cấm hành nghề hoặc làm công việc nhất định; Cấm cư trú; Quản chế; Tước một số quyền công dân; Tịch thu tài sản; Phạt tiền, khi không áp dụng là hình phạt chính; Trục xuất, khi không áp dụng là hình phạt chính.",
+          "source_article": "Điều 32, Khoản 2",
+          "id": 18
+        },
+        {
+          "question": "Tù chung thân là gì?",
+          "ground_truth": "Tù chung thân là hình phạt tù không thời hạn được áp dụng đối với người phạm tội đặc biệt nghiêm trọng, nhưng chưa đến mức bị xử phạt tử hình.",
+          "source_article": "Điều 39",
+          "id": 19
+        },
+        {
+          "question": "Không áp dụng hình phạt tử hình đối với những trường hợp nào?",
+          "ground_truth": "Không áp dụng hình phạt tử hình đối với người dưới 18 tuổi khi phạm tội, phụ nữ có thai, phụ nữ đang nuôi con dưới 36 tháng tuổi hoặc người đủ 75 tuổi trở lên khi phạm tội hoặc khi xét xử.",
+          "source_article": "Điều 40, Khoản 2",
+          "id": 20
+        },
+        {
+          "question": "Thời hạn cấm cư trú là bao lâu?",
+          "ground_truth": "Thời hạn cấm cư trú là từ 01 năm đến 05 năm, kể từ ngày chấp hành xong hình phạt tù.",
+          "source_article": "Điều 42",
+          "id": 21
+        },
+        {
+          "question": "Tái phạm là gì?",
+          "ground_truth": "Tái phạm là trường hợp đã bị kết án, chưa được xóa án tích mà lại thực hiện hành vi phạm tội do cố ý hoặc thực hiện hành vi phạm tội về tội phạm rất nghiêm trọng, tội phạm đặc biệt nghiêm trọng do vô ý.",
+          "source_article": "Điều 53, Khoản 1",
+          "id": 22
+        },
+        {
+          "question": "Thời hiệu thi hành bản án hình sự đối với pháp nhân thương mại là bao lâu?",
+          "ground_truth": "Thời hiệu thi hành bản án hình sự đối với pháp nhân thương mại là 05 năm.",
+          "source_article": "Điều 60, Khoản 3",
+          "id": 23
+        },
+        {
+          "question": "Mức tiền phạt đối với pháp nhân thương mại phạm tội được quy định như thế nào?",
+          "ground_truth": "Mức tiền phạt được quyết định căn cứ vào tính chất, mức độ nguy hiểm của tội phạm và có xét đến tình hình tài chính của pháp nhân thương mại phạm tội, sự biến động của giá cả nhưng không được thấp hơn 50.000.000 đồng.",
+          "source_article": "Điều 77, Khoản 2",
+          "id": 24
+        },
+        {
+          "question": "Việc xử lý người dưới 18 tuổi phạm tội dựa trên nguyên tắc nào?",
+          "ground_truth": "Việc xử lý người dưới 18 tuổi phạm tội phải bảo đảm lợi ích tốt nhất của người dưới 18 tuổi và chủ yếu nhằm mục đích giáo dục, giúp đỡ họ sửa chữa sai lầm, phát triển lành mạnh, trở thành công dân có ích cho xã hội.",
+          "source_article": "Điều 91, Khoản 1",
+          "id": 25
+        }
+      ]
+    }
+  ]
+}

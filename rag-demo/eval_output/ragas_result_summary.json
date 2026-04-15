@@ -1,0 +1,7 @@
+{
+  "overall": {
+    "context_precision": 0.942,
+    "context_recall": 0.945
+  },
+  "detail_csv": "eval_output/ragas_result.csv"
+}
