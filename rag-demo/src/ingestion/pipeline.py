@@ -48,29 +48,31 @@ class IngestionPipeline:
         )
 
     
-    def ingest(self, source: str, is_directory: bool = False) -> dict:
+    def ingest(self, source: str, is_directory: bool = False, source_url: str = "") -> dict:
         """
         Chạy full pipeline: Load → Chunk → Embed → Store.
 
         Args:
             source: Đường dẫn file hoặc thư mục
             is_directory: True nếu source là thư mục
+            source_url: URL gốc của tài liệu trên web (VD: https://thuvienphapluat.vn/...).
+                Lưu vào Qdrant metadata để tạo highlight URL khi trả lời RAG.
 
         Returns:
             dict: Thống kê kết quả pipeline
         """
         t_total = time.perf_counter()
         logger.info("=" * 55)
-        logger.info("INGESTION PIPELINE | source=%s", source)
+        logger.info("INGESTION PIPELINE | source=%s | source_url=%s", source, source_url or "(none)")
         logger.info("=" * 55)
 
         # === 1. LOAD (includes pre-processing: PDF/DOCX → Markdown) ===
         logger.info("[1/5] LOAD — Reading & converting to Markdown...")
         t1 = time.perf_counter()
         if is_directory:
-            documents = self.loader.load_directory(source)
+            documents = self.loader.load_directory(source, source_url=source_url)
         else:
-            documents = self.loader.load_file(source)
+            documents = self.loader.load_file(source, source_url=source_url)
 
         streaming = any(d.metadata.get("streaming_mode") for d in documents)
         load_mode = "streaming (page-by-page)" if streaming else "normal"
