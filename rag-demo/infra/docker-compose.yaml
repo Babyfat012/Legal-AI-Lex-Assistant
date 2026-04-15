@@ -12,7 +12,20 @@ services:
     environment:
       - QDRANT__STORAGE__BACKEND=local
       - QDRANT__STORAGE__PATH=/qdrant/storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=lex_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
 
 volumes:
   qdrant_storage:
+    driver: local
+  pg_data:
     driver: local
