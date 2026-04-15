@@ -1,0 +1,27 @@
+/* Sidebar conversation list */
+.sidebar-content {
+    background: #1a1a2e !important;
+}
+
+/* Thread item trong sidebar */
+[class*="ThreadListItem"] {
+    border-radius: 8px !important;
+    margin: 2px 6px !important;
+    transition: background 0.15s ease;
+}
+
+[class*="ThreadListItem"]:hover {
+    background: rgba(255,255,255,0.08) !important;
+}
+
+/* Chat bubbles */
+[data-testid="user-message"] {
+    background: #2563eb !important;
+    border-radius: 18px 18px 4px 18px !important;
+}
+
+/* Input box */
+[class*="MessageInput"] {
+    border-radius: 24px !important;
+    background: #1e1e2e !important;
+}

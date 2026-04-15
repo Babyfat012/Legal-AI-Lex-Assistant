@@ -1,13 +1,15 @@
 import os
 import time
+import httpx
 from collections import defaultdict
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from functools import lru_cache
 
 from api.schemas import (
     ChatRequest,
     ChatResponse,
     SourceChunk,
+    WebSource,
     IngestRequest,
     IngestResponse,
     CollectionInfoResponse,
@@ -22,6 +24,7 @@ from retrieval.reranker import Reranker
 from retrieval.query_analyzer import QueryAnalyzer
 from generator.llm_generator import LLMGenerator
 from core.logger import get_logger
+from core.database import IngestLog, SessionLocal
 
 logger = get_logger(__name__)
 
@@ -57,6 +60,85 @@ def _append_history(session_id: str, role: str, content: str) -> None:
     # Giữ tối đa _MAX_HISTORY_TURNS * 2 messages (rolling window)
     if len(store) > _MAX_HISTORY_TURNS * 2:
         _conversation_store[session_id] = store[-(_MAX_HISTORY_TURNS * 2) :]
+
+
+# ---------------------------------------------------------------------------
+# Web Search Fallback — Serper API + Highlight URL (#:~:text=)
+# ---------------------------------------------------------------------------
+SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
+SERPER_URL = "https://google.serper.dev/search"
+WEB_SEARCH_SCORE_THRESHOLD = float(os.getenv("WEB_SEARCH_THRESHOLD", "0.1"))
+
+
+async def _serper_search(query: str, num_results: int = 3) -> list[dict]:
+    """
+    Gọi Serper API — trả về list dict gồm title, url, snippet.
+    Mỗi phần tử sau đó được wrap thành WebSource.build() để tạo highlight_url.
+    """
+    if not SERPER_API_KEY:
+        logger.warning("SERPER_API_KEY not set — web search skipped")
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                SERPER_URL,
+                headers={
+                    "X-API-KEY": SERPER_API_KEY,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "q": f"{query} pháp luật Việt Nam",
+                    "num": num_results,
+                    "gl": "vn",
+                    "hl": "vi",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        results = []
+        for item in data.get("organic", [])[:num_results]:
+            results.append({
+                "title":   item.get("title", ""),
+                "url":     item.get("link", ""),
+                "snippet": item.get("snippet", ""),
+            })
+        logger.info("Serper returned %d results for query: %.60s", len(results), query)
+        return results
+    except Exception as exc:
+        logger.warning("Serper search failed: %s", exc)
+        return []
+
+
+def _web_synthesize(generator, query: str, web_results: list[dict]) -> str:
+    """
+    Nhờ LLM tổng hợp câu trả lời từ web results.
+    Sử dụng simple_model để tránh tốn chi phí.
+    """
+    search_context = "\n\n".join([
+        f"Tiêu đề: {r['title']}\nNội dung: {r['snippet']}\nNguồn: {r['url']}"
+        for r in web_results
+    ])
+    system_msg = (
+        "Bạn là chuyên gia pháp luật Việt Nam. Tổng hợp câu trả lời ngắn gọn, "
+        "chính xác từ các kết quả tìm kiếm web sau. Dùng **bold** cho số tiền, "
+        "mức phạt, điều khoản quan trọ ng. Ngôn ngữ rõ ràng, dễ hiểu."
+    )
+    user_msg = f"Kết quả tìm kiếm web:\n{search_context}\n\nCâu hỏi: {query}"
+    try:
+        resp = generator.client.chat.completions.create(
+            model=generator.simple_model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user",   "content": user_msg},
+            ],
+            temperature=0.1,
+            max_tokens=800,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as exc:
+        logger.warning("Web synthesize LLM call failed: %s", exc)
+        # Fallback: snippet của result đầu tiên
+        return web_results[0]["snippet"] if web_results else "Không tìm thấy thông tin."
 
 
 # --- Dependency injection (singleton via lru_cache) ---
@@ -137,7 +219,7 @@ def health_check():
 
 
 @router.post("/chat", response_model=ChatResponse, tags=["RAG"])
-def chat(
+async def chat(
     request: ChatRequest,
     retriever: Retriever = Depends(get_retriever),
     generator: LLMGenerator = Depends(get_generator),
@@ -216,13 +298,53 @@ def chat(
         )
 
         # --- Pipeline: Rewrite (condense) + Retrieve + Generate ---
-        answer, retrieved_chunks = generator.generate_pipeline(
-            question=request.query,
-            chat_history=chat_history_str,
-            retriever=retriever,
-        )
+        standalone = generator.condense_question(chat_history_str, request.query)
+        retrieved_chunks = retriever.retrieve(standalone)
 
-        # FIX: lưu turn mới vào server-side store sau khi generate thành công
+        # --- Web Search Fallback ---
+        # Trigger khi không có chunk nào được truy xuất (RAG bị miss)
+        tool_used = "rag"
+        web_sources: list[WebSource] = []
+
+        if not retrieved_chunks:
+            logger.info(
+                "RAG returned 0 chunks — triggering web search fallback | query: %.80s",
+                standalone,
+            )
+            import asyncio
+            raw_web = await _serper_search(standalone)
+
+            if raw_web:
+                tool_used = "web_search"
+                # Xây dựng WebSource với highlight_url (#:~:text=)
+                web_sources = [
+                    WebSource.build(
+                        title=r["title"],
+                        url=r["url"],
+                        snippet=r["snippet"],
+                    )
+                    for r in raw_web
+                ]
+                answer = _web_synthesize(generator, standalone, raw_web)
+                answer += (
+                    "\n\n\u26a0\ufe0f *Thông tin này lấy từ web, chưa được xác minh trong knowledge base.*"
+                )
+                retrieved_chunks = []
+            else:
+                answer = (
+                    "Xin lỗi, tôi không tìm thấy thông tin liên quan. "
+                    "Vui lòng thử lại với câu hỏi cụ thể hơn."
+                )
+        else:
+            # RAG có kết quả — generate bình thường
+            answer, retrieved_chunks = generator.generate_pipeline(
+                question=request.query,
+                chat_history=chat_history_str,
+                retriever=retriever,
+                context_chunks=retrieved_chunks,
+            )
+
+        # Lưu turn mới vào server-side store
         if session_id:
             _append_history(session_id, "user", request.query)
             _append_history(session_id, "assistant", answer)
@@ -232,7 +354,7 @@ def chat(
                 len(_conversation_store[session_id]),
             )
 
-        # Populate sources
+        # Populate RAG sources
         sources = [
             {
                 "text": chunk.get("text"),
@@ -244,18 +366,22 @@ def chat(
                 "muc": chunk["metadata"].get("muc"),
                 "dieu": chunk["metadata"].get("dieu"),
                 "filename": chunk["metadata"].get("filename"),
+                "source_url": chunk["metadata"].get("source_url") or "",
             }
             for chunk in retrieved_chunks
         ]
 
         logger.info(
-            "POST /chat done | mode=%s | %.2fs",
+            "POST /chat done | mode=%s | tool=%s | %.2fs",
             mode,
+            tool_used,
             time.perf_counter() - t0,
         )
         return ChatResponse(
             answer=answer,
             sources=sources,
+            web_sources=web_sources,
+            tool_used=tool_used,
             query=request.query,
             mode=mode,
             sub_queries=sub_queries,
@@ -301,6 +427,7 @@ def ingest(
         result = pipeline.ingest(
             source=request.file_path,
             is_directory=request.is_directory,
+            source_url=request.source_url or "",
         )
 
         return IngestResponse(
@@ -334,4 +461,62 @@ def delete_collection(store: QdrantVectorStore = Depends(get_vector_store)):
         get_pipeline.cache_clear()
         return {"status": "deleted"}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/collection/documents/{file_name}", tags=["System"])
+def delete_document(file_name: str, store: QdrantVectorStore = Depends(get_vector_store)):
+    """Xóa các points thuộc về một file cụ thể."""
+    try:
+        store.delete_points_by_filename(file_name)
+        return {"status": "success", "file_name": file_name}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/ingest/upload", response_model=IngestResponse, tags=["Ingestion"])
+async def ingest_upload(
+    file: UploadFile = File(...),
+    recreate_collection: bool = Form(False),
+    source_url: str = Form("", description="URL gốc của tài liệu trên web"),
+    pipeline: IngestionPipeline = Depends(get_pipeline),
+):
+    """
+    Ingest file PDF/DOCX từ client gửi lên (binary).
+    """
+    logger.info("POST /ingest/upload | file=%s | recreate=%s", file.filename, recreate_collection)
+    
+    # Save file temporarily
+    temp_dir = os.path.join(BASE_DIR, "data", "temp_uploads")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, file.filename)
+    
+    with open(temp_path, "wb") as f:
+        f.write(await file.read())
+    
+    try:
+        if recreate_collection:
+            store = get_vector_store()
+            store.recreate_collection()
+            get_vector_store.cache_clear()
+            get_retriever.cache_clear()
+            get_pipeline.cache_clear()
+
+        result = pipeline.ingest(
+            source=temp_path,
+            is_directory=False,
+            source_url=source_url or "",
+        )
+
+        # Cleanup temp file
+        os.remove(temp_path)
+
+        return IngestResponse(
+            status=result["status"],
+            documents_loaded=result["documents_loaded"],
+            chunks_created=result["chunks_created"],
+            chunks_stored=result["chunks_stored"],
+            collection_info=result["collection_info"],
+        )
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
         raise HTTPException(status_code=500, detail=str(e))
