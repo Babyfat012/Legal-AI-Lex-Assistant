@@ -2,9 +2,10 @@
 .venv/
 .env
 .env.*
-/documents/
+rag-demo/documents/
 rag-demo/logs/*.log
 rag-demo/logs/*.log.*
+rag-demo/.agents/
 
 # Ignore Chainlit and auxiliary UI folders anywhere in the repo
 **/.chainlit/
