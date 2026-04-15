@@ -15,7 +15,9 @@ from qdrant_client.models import (
     Fusion,
     ScoredPoint,
     PayloadSchemaType,
-    # Filter,
+    Filter,
+    FieldCondition,
+    MatchValue,
 )
 from ingestion.chunking import Chunk
 from core.logger import get_logger
@@ -33,6 +35,7 @@ PAYLOAD_INDEX_FIELDS: list[tuple[str, PayloadSchemaType]] = [
     ("muc",        PayloadSchemaType.KEYWORD),   # mục trong chương
     ("dieu",       PayloadSchemaType.KEYWORD),   # điều luật
     ("source",     PayloadSchemaType.KEYWORD),   # đường dẫn file gốc
+    ("source_url", PayloadSchemaType.KEYWORD),   # URL gốc tài liệu trên web (dùng cho highlight URL)
     ("chunk_type", PayloadSchemaType.KEYWORD),   # "parent" | "child"
 ]
 
@@ -382,3 +385,20 @@ class QdrantVectorStore:
         """
         self.delete_collection()
         self._ensure_collection()
+
+    def delete_points_by_filename(self, filename: str):
+        """
+        Xóa các points có metadata 'filename' khớp với giá trị truyền vào.
+        """
+        logger.info("Deleting points for file: '%s' from '%s'", filename, self.collection_name)
+        return self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="filename",
+                        match=MatchValue(value=filename),
+                    )
+                ]
+            ),
+        )

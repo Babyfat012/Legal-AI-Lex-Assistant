@@ -81,12 +81,14 @@ class DocumentLoader:
         base_name = stem.rsplit("_", 1)[0]  # Loại bỏ phần năm nếu có
         return LAW_NAME_MAP.get(base_name.lower(), stem.replace("_", " ").replace("-", " "))
 
-    def load_file(self, file_path: str) -> list[Document]:
+    def load_file(self, file_path: str, source_url: str = "") -> list[Document]:
         """
         Load 1 file, trả về list[Document].
 
         Args:
             file_path: Đường dẫn file cần load.
+            source_url: URL gốc của tài liệu trên web (VD: https://thuvienphapluat.vn/...).
+                Lưu vào metadata, dùng để tạo highlight URL (#:~:text=) khi trả lời RAG.
 
         Returns:
             list[Document]
@@ -110,6 +112,7 @@ class DocumentLoader:
                     "filename": path.name,
                     "file_type": ext,
                     "format": "markdown",
+                    "source_url": source_url,
                 },
             )]
 
@@ -122,7 +125,7 @@ class DocumentLoader:
                     path.name, size_mb, self.large_file_threshold_mb,
                     self.pages_per_batch,
                 )
-                return list(self._load_pdf_streaming(path))
+                return list(self._load_pdf_streaming(path, source_url=source_url))
 
             logger.info(
                 "[Loader] Small PDF: %s (%.1f MB) → normal mode", path.name, size_mb
@@ -137,11 +140,12 @@ class DocumentLoader:
                 "filename": path.name,
                 "file_type": ext,
                 "format": "markdown",
+                "source_url": source_url,
             },
         )]
 
     def load_directory(
-        self, dir_path: str, extensions: Optional[list[str]] = None
+        self, dir_path: str, extensions: Optional[list[str]] = None, source_url: str = ""
     ) -> list[Document]:
         """
         Load tất cả files trong thư mục (recursive).
@@ -149,6 +153,7 @@ class DocumentLoader:
         Args:
             dir_path: Đường dẫn thư mục.
             extensions: Lọc theo extensions (default: tất cả supported).
+            source_url: URL gốc của tài liệu (dùng cho tất cả files trong thư mục).
 
         Returns:
             list[Document]
@@ -163,7 +168,7 @@ class DocumentLoader:
         for file_path in sorted(dir_path.rglob("*")):
             if file_path.suffix.lower() in allowed_exts:
                 try:
-                    docs = self.load_file(str(file_path))
+                    docs = self.load_file(str(file_path), source_url=source_url)
                     documents.extend(docs)
                     logger.info("Loaded %s → %d document(s)", file_path.name, len(docs))
                 except Exception as e:
@@ -176,7 +181,7 @@ class DocumentLoader:
     # Streaming internals
     # ------------------------------------------------------------------
 
-    def _load_pdf_streaming(self, path: Path) -> Iterator[Document]:
+    def _load_pdf_streaming(self, path: Path, source_url: str = "") -> Iterator[Document]:
         try:
             import pypdf
         except ImportError:
@@ -238,6 +243,7 @@ class DocumentLoader:
                     "batch_index": batch_count,
                     "streaming_mode": True,
                     "luat": self._extract_law_name(path.name),
+                    "source_url": source_url,
                 },
             )
 
