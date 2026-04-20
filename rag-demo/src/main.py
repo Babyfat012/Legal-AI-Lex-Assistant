@@ -20,6 +20,9 @@ logger.info("OPENAI_API_KEY set: %s", bool(os.getenv("OPENAI_API_KEY")))
 logger.info("QDRANT_URL: %s", os.getenv("QDRANT_URL", "not set"))
 
 from api.routes import router
+from api.auth_routes import router as auth_router
+from api.conversation_routes import router as conv_router
+from api.docgen_routes import router as docgen_router
 
 app = FastAPI(
     title="Lex - Legal AI Assistant",
@@ -49,6 +52,9 @@ app.add_middleware(
 
 # Routes
 app.include_router(router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1/auth")
+app.include_router(conv_router, prefix="/api/v1")
+app.include_router(docgen_router, prefix="/api/v1")
 
 @app.get("/", tags=["System"])
 def root():
