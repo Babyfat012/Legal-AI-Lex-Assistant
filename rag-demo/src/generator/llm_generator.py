@@ -321,6 +321,7 @@ Tóm tắt ngắn (1-3 câu), nhấn mạnh chủ đề pháp lý và các thự
         chat_history: str,
         retriever,
         context_chunks: list[dict] = None,
+        language_instruction: str = "",
     ) -> tuple[str, list[dict]]:
         standalone = self.condense_question(chat_history, question)
 
@@ -350,7 +351,7 @@ Tóm tắt ngắn (1-3 câu), nhấn mạnh chủ đề pháp lý và các thự
         response = self.client.chat.completions.create(
             model=self.simple_model,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": SYSTEM_PROMPT + language_instruction},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=self.temperature,
