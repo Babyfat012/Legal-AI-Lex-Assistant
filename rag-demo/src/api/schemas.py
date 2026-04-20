@@ -33,6 +33,13 @@ class ChatRequest(BaseModel):
         default_factory=list,
         description="Lịch sử hội thoại (dạng list các turn: user/assistant). Dùng làm fallback nếu server chưa có session.",
     )
+    language: str = Field(
+        default="vi",
+        description=(
+            "Ngôn ngữ phản hồi: 'vi' (Tiếng Việt) hoặc 'en' (English). "
+            "Khi language='en', LLM sẽ trả lời bằng tiếng Anh."
+        ),
+    )
 
 
 class IngestRequest(BaseModel):

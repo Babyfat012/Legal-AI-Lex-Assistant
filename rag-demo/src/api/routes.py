@@ -1,7 +1,9 @@
 import os
 import time
+import uuid
 import httpx
 from collections import defaultdict
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from functools import lru_cache
 
@@ -24,7 +26,12 @@ from retrieval.reranker import Reranker
 from retrieval.query_analyzer import QueryAnalyzer
 from generator.llm_generator import LLMGenerator
 from core.logger import get_logger
-from core.database import IngestLog, SessionLocal
+from core.database import IngestLog, SessionLocal, get_db
+from sqlalchemy.orm import Session
+from sqlalchemy import update, select, insert
+from api.auth_routes import get_current_user
+from auth.database import AsyncSessionLocal, Conversation, Message
+from auth.database import AsyncSessionLocal, Message as DbMessage, Conversation as DbConversation
 
 logger = get_logger(__name__)
 
@@ -60,6 +67,26 @@ def _append_history(session_id: str, role: str, content: str) -> None:
     # Giữ tối đa _MAX_HISTORY_TURNS * 2 messages (rolling window)
     if len(store) > _MAX_HISTORY_TURNS * 2:
         _conversation_store[session_id] = store[-(_MAX_HISTORY_TURNS * 2) :]
+
+
+# ---------------------------------------------------------------------------
+# Language instruction for LLM responses
+# ---------------------------------------------------------------------------
+_LANG_INSTRUCTION = {
+    "en": (
+        "\n\n[LANGUAGE INSTRUCTION]: The user has selected English. "
+        "You MUST respond entirely in English. Translate all legal terms, "
+        "article names, and explanations into English while keeping the "
+        "original Vietnamese legal reference names in parentheses for accuracy. "
+        "Example: 'Article 123, Clause 2 — Law X of YYYY (Điều 123, Khoản 2 — Luật X năm YYYY)'"
+    ),
+    "vi": "",  # Vietnamese is the default, no extra instruction needed
+}
+
+
+def _get_lang_instruction(language: str) -> str:
+    """Return language instruction to append to system prompt."""
+    return _LANG_INSTRUCTION.get(language, "")
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +136,7 @@ async def _serper_search(query: str, num_results: int = 3) -> list[dict]:
         return []
 
 
-def _web_synthesize(generator, query: str, web_results: list[dict]) -> str:
+def _web_synthesize(generator, query: str, web_results: list[dict], language: str = "vi") -> str:
     """
     Nhờ LLM tổng hợp câu trả lời từ web results.
     Sử dụng simple_model để tránh tốn chi phí.
@@ -123,6 +150,7 @@ def _web_synthesize(generator, query: str, web_results: list[dict]) -> str:
         "chính xác từ các kết quả tìm kiếm web sau. Dùng **bold** cho số tiền, "
         "mức phạt, điều khoản quan trọ ng. Ngôn ngữ rõ ràng, dễ hiểu."
     )
+    system_msg += _get_lang_instruction(language)
     user_msg = f"Kết quả tìm kiếm web:\n{search_context}\n\nCâu hỏi: {query}"
     try:
         resp = generator.client.chat.completions.create(
@@ -221,6 +249,7 @@ def health_check():
 @router.post("/chat", response_model=ChatResponse, tags=["RAG"])
 async def chat(
     request: ChatRequest,
+    current_user: dict = Depends(get_current_user),
     retriever: Retriever = Depends(get_retriever),
     generator: LLMGenerator = Depends(get_generator),
 ):
@@ -246,6 +275,13 @@ async def chat(
     )
     t0 = time.perf_counter()
     try:
+        # Initialize variables
+        sources = []
+        web_sources: list[WebSource] = []
+        tool_used = "rag"
+        answer = ""
+        retrieved_chunks = []
+
         retriever.use_reranker = request.use_reranker
         retriever.final_top_n = request.top_k
 
@@ -257,7 +293,51 @@ async def chat(
         # FIX: ưu tiên server-side history (đáng tin cậy hơn client-sent history)
         # Client có thể không gửi chat_history, hoặc gửi thiếu — server tự lưu
         session_id = getattr(request, "session_id", None) or ""
+        language = getattr(request, "language", "vi") or "vi"
         server_history = _get_history(session_id) if session_id else []
+
+        # Handle conversation creation/retrieval
+        conv_uuid = None
+        if session_id:
+            try:
+                conv_uuid = uuid.UUID(session_id)
+                # Check if conversation exists and belongs to current user
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(
+                        select(Conversation).where(
+                            Conversation.id == conv_uuid,
+                            Conversation.user_id == uuid.UUID(current_user["user_id"])
+                        )
+                    )
+                    conversation = result.scalar_one_or_none()
+
+                    # If conversation doesn't exist, create new one
+                    if not conversation:
+                        new_conv = Conversation(
+                            id=conv_uuid,
+                            user_id=uuid.UUID(current_user["user_id"]),
+                            title=f"Hội thoại mới {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                            created_at=datetime.utcnow(),
+                            updated_at=datetime.utcnow()
+                        )
+                        db.add(new_conv)
+                        await db.commit()
+                        logger.info("Created new conversation | id=%s | user=%s", conv_uuid, current_user["email"])
+            except ValueError:
+                # Invalid UUID format, create new conversation
+                conv_uuid = uuid.uuid4()
+                async with AsyncSessionLocal() as db:
+                    new_conv = Conversation(
+                        id=conv_uuid,
+                        user_id=uuid.UUID(current_user["user_id"]),
+                        title=f"Hội thoại mới {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+                    db.add(new_conv)
+                    await db.commit()
+                session_id = str(conv_uuid)
+                logger.info("Created new conversation with new UUID | id=%s | user=%s", conv_uuid, current_user["email"])
 
         # Fallback về client-sent history nếu server chưa có (lần đầu kết nối)
         if server_history:
@@ -325,16 +405,27 @@ async def chat(
                     )
                     for r in raw_web
                 ]
-                answer = _web_synthesize(generator, standalone, raw_web)
-                answer += (
-                    "\n\n\u26a0\ufe0f *Thông tin này lấy từ web, chưa được xác minh trong knowledge base.*"
-                )
+                answer = _web_synthesize(generator, standalone, raw_web, language)
+                if language == "en":
+                    answer += (
+                        "\n\n\u26a0\ufe0f *This information is from the web and has not been verified in the knowledge base.*"
+                    )
+                else:
+                    answer += (
+                        "\n\n\u26a0\ufe0f *Thông tin này lấy từ web, chưa được xác minh trong knowledge base.*"
+                    )
                 retrieved_chunks = []
             else:
-                answer = (
-                    "Xin lỗi, tôi không tìm thấy thông tin liên quan. "
-                    "Vui lòng thử lại với câu hỏi cụ thể hơn."
-                )
+                if language == "en":
+                    answer = (
+                        "Sorry, I couldn't find relevant information. "
+                        "Please try again with a more specific question."
+                    )
+                else:
+                    answer = (
+                        "Xin lỗi, tôi không tìm thấy thông tin liên quan. "
+                        "Vui lòng thử lại với câu hỏi cụ thể hơn."
+                    )
         else:
             # RAG có kết quả — generate bình thường
             answer, retrieved_chunks = generator.generate_pipeline(
@@ -342,6 +433,7 @@ async def chat(
                 chat_history=chat_history_str,
                 retriever=retriever,
                 context_chunks=retrieved_chunks,
+                language_instruction=_get_lang_instruction(language),
             )
 
         # Lưu turn mới vào server-side store
@@ -353,6 +445,40 @@ async def chat(
                 session_id,
                 len(_conversation_store[session_id]),
             )
+
+            # --- Persist messages to PostgreSQL ---
+            try:
+                now = datetime.utcnow()
+                conv_uuid = uuid.UUID(session_id)
+                async with AsyncSessionLocal() as db:
+                    # Save user message
+                    db.add(Message(
+                        id=uuid.uuid4(),
+                        conversation_id=conv_uuid,
+                        role="user",
+                        content=request.query,
+                        sources=None,
+                        created_at=now,
+                    ))
+                    # Save assistant message
+                    db.add(Message(
+                        id=uuid.uuid4(),
+                        conversation_id=conv_uuid,
+                        role="assistant",
+                        content=answer,
+                        sources=sources if sources else None,
+                        created_at=now,
+                    ))
+                    # Update conversation.updated_at
+                    await db.execute(
+                        update(Conversation)
+                        .where(Conversation.id == conv_uuid)
+                        .values(updated_at=now)
+                    )
+                    await db.commit()
+                    logger.debug("Messages persisted to DB | conv=%s", session_id)
+            except Exception as db_err:
+                logger.warning("Failed to persist messages to DB: %s", db_err)
 
         # Populate RAG sources
         sources = [
@@ -449,6 +575,24 @@ def collection_info(store: QdrantVectorStore = Depends(get_vector_store)):
         return CollectionInfoResponse(**info)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ingest/logs", tags=["Ingestion"])
+def get_ingest_logs(db: Session = Depends(get_db)):
+    """Lấy lịch sử ingest từ PostgreSQL — dùng bởi Admin UI."""
+    logs = db.query(IngestLog).order_by(IngestLog.upload_at.desc()).all()
+    return [
+        {
+            "id": str(log.id),
+            "file_name": log.file_name,
+            "upload_at": log.upload_at.isoformat() if log.upload_at else None,
+            "status": log.status,
+            "chunk_count": log.chunk_count,
+            "elapsed_secs": log.elapsed_secs,
+            "error_msg": log.error_msg,
+        }
+        for log in logs
+    ]
 
 
 @router.delete("/collection", tags=["System"])
