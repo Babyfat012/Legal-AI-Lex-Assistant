@@ -7,6 +7,95 @@ from urllib.parse import quote
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# i18n — Bilingual UI strings (Vietnamese / English)
+# ---------------------------------------------------------------------------
+I18N = {
+    "vi": {
+        "welcome": (
+            "⚖️ Xin chào! Tôi là **Lex** — trợ lý pháp lý AI chuyên về luật Việt Nam.\n\n"
+            "Hãy đặt câu hỏi pháp luật để tôi hỗ trợ bạn."
+        ),
+        "empty_input": "Vui lòng nhập câu hỏi pháp luật.",
+        "searching": "🔍 Đang tìm kiếm thông tin liên quan...",
+        "no_answer": "Xin lỗi, tôi không tìm thấy thông tin phù hợp.",
+        "api_error": "❌ Lỗi kết nối API: {error}",
+        "httpx_missing": "Lỗi: Chưa cài đặt thư viện `httpx`",
+        "settings_info": "Cài đặt: \n- TopK: {top_k}\n- Reasoning: {reasoning}",
+        "reasoning_toggle": "Đã {state} chế độ lập luận.",
+        "reasoning_on": "bật",
+        "reasoning_off": "tắt",
+        "lang_switched": "🌐 Đã chuyển sang **Tiếng Anh**.",
+        "lang_button": "🌐 English",
+        "lang_button_id": "switch_lang",
+        "reasoning_header": "### 🧠 Phân tích pháp lý:\n",
+        "reasoning_sections": {
+            "hanh_vi": "1. Hành vi các bên",
+            "quy_dinh": "2. Quy định áp dụng",
+            "doi_chieu": "3. Đối chiếu pháp lý",
+            "ket_luan": "4. Kết luận",
+        },
+        "web_sources_header": "### 🌐 Nguồn tham khảo từ web:\n",
+        "web_sources_footer": "\n> 💡 *Click vào link để mở trang web và xem phần được highlight trực tiếp.*",
+        "rag_sources_header": "### 📚 Nguồn trong Knowledge Base:\n",
+        "rag_sources_footer": "\n> 💡 *Click để xem điều khoản được highlight trực tiếp trên trang nguồn.*",
+        "source_label": "Nguồn {i}",
+    },
+    "en": {
+        "welcome": (
+            "⚖️ Hello! I'm **Lex** — an AI legal assistant specializing in Vietnamese law.\n\n"
+            "Ask me any legal question and I'll help you."
+        ),
+        "empty_input": "Please enter a legal question.",
+        "searching": "🔍 Searching for relevant information...",
+        "no_answer": "Sorry, I couldn't find relevant information.",
+        "api_error": "❌ API connection error: {error}",
+        "httpx_missing": "Error: `httpx` library is not installed",
+        "settings_info": "Settings: \n- TopK: {top_k}\n- Reasoning: {reasoning}",
+        "reasoning_toggle": "Reasoning mode {state}.",
+        "reasoning_on": "enabled",
+        "reasoning_off": "disabled",
+        "lang_switched": "🌐 Switched to **Tiếng Việt**.",
+        "lang_button": "🌐 Tiếng Việt",
+        "lang_button_id": "switch_lang",
+        "reasoning_header": "### 🧠 Legal Analysis:\n",
+        "reasoning_sections": {
+            "hanh_vi": "1. Actions of the Parties",
+            "quy_dinh": "2. Applicable Regulations",
+            "doi_chieu": "3. Legal Cross-reference",
+            "ket_luan": "4. Conclusion",
+        },
+        "web_sources_header": "### 🌐 Web References:\n",
+        "web_sources_footer": "\n> 💡 *Click the link to view the highlighted section on the source page.*",
+        "rag_sources_header": "### 📚 Knowledge Base Sources:\n",
+        "rag_sources_footer": "\n> 💡 *Click to view the highlighted provision on the source page.*",
+        "source_label": "Source {i}",
+    },
+}
+
+
+def _t(key: str, **kwargs) -> str:
+    """Get localized string for the current session language."""
+    lang = "vi"
+    try:
+        lang = cl.user_session.get("language", "vi") or "vi"
+    except Exception:
+        pass
+    template = I18N.get(lang, I18N["vi"]).get(key, I18N["vi"].get(key, key))
+    if kwargs:
+        return template.format(**kwargs)
+    return template
+
+
+def _t_dict(key: str) -> dict:
+    """Get localized dict (e.g. reasoning_sections) for current session language."""
+    lang = "vi"
+    try:
+        lang = cl.user_session.get("language", "vi") or "vi"
+    except Exception:
+        pass
+    return I18N.get(lang, I18N["vi"]).get(key, I18N["vi"].get(key, {}))
+
 try:
     import httpx
 except ImportError:
@@ -83,13 +172,8 @@ def _set_setting(name, value):
 def format_reasoning_md(reasoning: dict) -> str:
     if not reasoning:
         return ""
-    parts = ["\n---\n### 🧠 Phân tích pháp lý:\n"]
-    sections = {
-        "hanh_vi": "1. Hành vi các bên",
-        "quy_dinh": "2. Quy định áp dụng",
-        "doi_chieu": "3. Đối chiếu pháp lý",
-        "ket_luan": "4. Kết luận",
-    }
+    parts = ["\n---\n" + _t("reasoning_header")]
+    sections = _t_dict("reasoning_sections")
     for key, label in sections.items():
         content = reasoning.get(key)
         if content:
@@ -107,9 +191,9 @@ def format_web_sources_md(web_sources: list[dict]) -> str:
     """
     if not web_sources:
         return ""
-    lines = ["\n---\n### 🌐 Nguồn tham khảo từ web:\n"]
+    lines = ["\n---\n" + _t("web_sources_header")]
     for i, src in enumerate(web_sources, 1):
-        title = src.get("title", f"Nguồn {i}")
+        title = src.get("title", _t("source_label", i=i))
         highlight_url = src.get("highlight_url") or src.get("url", "")
         snippet = src.get("snippet", "")
         # Hiển thị 100 ký tự đầu của snippet làm preview
@@ -120,9 +204,7 @@ def format_web_sources_md(web_sources: list[dict]) -> str:
             f"{i}. **[{title}]({highlight_url})**\n"
             f"   > {preview}"
         )
-    lines.append(
-        "\n> 💡 *Click vào link để mở trang web và xem phần được highlight trực tiếp.*"
-    )
+    lines.append(_t("web_sources_footer"))
     return "\n".join(lines)
 
 
@@ -208,7 +290,7 @@ def format_rag_sources_md(sources: list[dict]) -> str:
     if not sources_with_url:
         return ""
 
-    lines = ["\n---\n### 📚 Nguồn trong Knowledge Base:\n"]
+    lines = ["\n---\n" + _t("rag_sources_header")]
     seen_urls: set[str] = set()  # tránh hiển thị trùng nguồn
 
     displayed = 0
@@ -225,7 +307,7 @@ def format_rag_sources_md(sources: list[dict]) -> str:
             src.get("dieu")
             or src.get("luat")
             or src.get("filename")
-            or f"Nguồn {displayed + 1}"
+            or _t("source_label", i=displayed + 1)
         )
 
         # Strip context prefix & heading → nội dung thực tế của điều luật
@@ -264,9 +346,7 @@ def format_rag_sources_md(sources: list[dict]) -> str:
     if displayed == 0:
         return ""
 
-    lines.append(
-        "\n> 💡 *Click để xem điều khoản được highlight trực tiếp trên trang nguồn.*"
-    )
+    lines.append(_t("rag_sources_footer"))
     return "\n".join(lines)
 
 
@@ -280,7 +360,45 @@ async def on_chat_start():
     cl.user_session.set("session_id", thread_id)
     cl.user_session.set("thread_id", thread_id)
     cl.user_session.set("chat_history", [])
+    cl.user_session.set("language", "vi")  # Luôn bắt đầu bằng tiếng Việt
     logger.info("New chat session started | session_id=%s", thread_id)
+
+    # Gửi nút chuyển đổi ngôn ngữ
+    lang_action = cl.Action(
+        name="switch_lang",
+        payload={"target_lang": "en"},
+        label=I18N["vi"]["lang_button"],
+        tooltip="Switch to English",
+    )
+    await cl.Message(
+        content=I18N["vi"]["welcome"],
+        actions=[lang_action],
+    ).send()
+
+
+@cl.action_callback("switch_lang")
+async def on_switch_lang(action: cl.Action):
+    """Toggle giữa tiếng Việt và tiếng Anh."""
+    current_lang = cl.user_session.get("language", "vi")
+    new_lang = "en" if current_lang == "vi" else "vi"
+    cl.user_session.set("language", new_lang)
+
+    # Tạo nút mới với label ngược lại
+    opposite_lang = "en" if new_lang == "vi" else "vi"
+    next_button_label = I18N[new_lang]["lang_button"]
+    next_tooltip = "Chuyển sang Tiếng Việt" if new_lang == "en" else "Switch to English"
+
+    lang_action = cl.Action(
+        name="switch_lang",
+        payload={"target_lang": opposite_lang},
+        label=next_button_label,
+        tooltip=next_tooltip,
+    )
+    await cl.Message(
+        content=I18N[new_lang]["lang_switched"],
+        actions=[lang_action],
+    ).send()
+    logger.info("Language switched to %s", new_lang)
 
 
 @cl.on_chat_resume
@@ -316,7 +434,7 @@ async def main(message: cl.Message):
     user_text = message.content.strip()
 
     if not user_text:
-        await cl.Message(content="Vui lòng nhập câu hỏi pháp luật.").send()
+        await cl.Message(content=_t("empty_input")).send()
         return
 
     # Xử lý Slash Commands
@@ -324,17 +442,18 @@ async def main(message: cl.Message):
         cmd = user_text.split()
         if cmd[0] == "/settings":
             await cl.Message(
-                content=f"Cài đặt: \n- TopK: {_get_setting('top_k', DEFAULT_TOP_K)}\n- Reasoning: {_get_setting('reasoning_mode', False)}"
+                content=_t("settings_info", top_k=_get_setting('top_k', DEFAULT_TOP_K), reasoning=_get_setting('reasoning_mode', False))
             ).send()
         elif cmd[0] == "/reasoning":
             mode = cmd[1].lower() in ["on", "true", "1"] if len(cmd) > 1 else False
             _set_setting("reasoning_mode", mode)
+            state = _t("reasoning_on") if mode else _t("reasoning_off")
             await cl.Message(
-                content=f"Đã {'bật' if mode else 'tắt'} chế độ lập luận."
+                content=_t("reasoning_toggle", state=state)
             ).send()
         return
 
-    msg = cl.Message(content="🔍 Đang tìm kiếm thông tin liên quan...")
+    msg = cl.Message(content=_t("searching"))
     await msg.send()
 
     session_id = cl.user_session.get("session_id")
@@ -349,6 +468,8 @@ async def main(message: cl.Message):
     reasoning_mode = _get_setting("reasoning_mode", False)
     top_k = _get_setting("top_k", DEFAULT_TOP_K)
 
+    language = cl.user_session.get("language", "vi")
+
     payload = {
         "query": user_text,
         "session_id": session_id,
@@ -356,10 +477,11 @@ async def main(message: cl.Message):
         "use_reranker": True,
         "reasoning_mode": bool(reasoning_mode),
         "chat_history": cl.user_session.get("chat_history", []),
+        "language": language,
     }
 
     if httpx is None:
-        await cl.Message(content="Lỗi: Chưa cài đặt thư viện `httpx`").send()
+        await cl.Message(content=_t("httpx_missing")).send()
         return
 
     try:
@@ -369,11 +491,11 @@ async def main(message: cl.Message):
             data = resp.json()
     except Exception as e:
         logger.error(f"API Error: {e}")
-        await cl.Message(content=f"❌ Lỗi kết nối API: {str(e)}").send()
+        await cl.Message(content=_t("api_error", error=str(e))).send()
         return
 
     # 1. Gửi câu trả lời chính
-    answer = data.get("answer", "Xin lỗi, tôi không tìm thấy thông tin phù hợp.")
+    answer = data.get("answer", _t("no_answer"))
     await cl.Message(content=answer).send()
 
     # 2. Gửi phân tích lý luận (nếu có)

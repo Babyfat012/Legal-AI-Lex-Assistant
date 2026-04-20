@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, FileText, File, X, Link, AlertTriangle, Rocket, FolderUp, FileUp } from 'lucide-react';
 import toast from 'react-hot-toast';

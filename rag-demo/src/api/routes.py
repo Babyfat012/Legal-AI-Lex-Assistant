@@ -622,20 +622,21 @@ async def ingest_upload(
     recreate_collection: bool = Form(False),
     source_url: str = Form("", description="URL gốc của tài liệu trên web"),
     pipeline: IngestionPipeline = Depends(get_pipeline),
+    db: Session = Depends(get_db),
 ):
     """
     Ingest file PDF/DOCX từ client gửi lên (binary).
     """
     logger.info("POST /ingest/upload | file=%s | recreate=%s", file.filename, recreate_collection)
-    
+
     # Save file temporarily
     temp_dir = os.path.join(BASE_DIR, "data", "temp_uploads")
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, file.filename)
-    
+
     with open(temp_path, "wb") as f:
         f.write(await file.read())
-    
+
     try:
         if recreate_collection:
             store = get_vector_store()
@@ -650,6 +651,18 @@ async def ingest_upload(
             source_url=source_url or "",
         )
 
+        # Log successful ingest
+        from datetime import datetime
+        log_entry = IngestLog(
+            file_name=file.filename,
+            status="success",
+            chunk_count=result.get("chunks_stored", 0),
+            elapsed_secs=0,
+            upload_at=datetime.utcnow(),
+        )
+        db.add(log_entry)
+        db.commit()
+
         # Cleanup temp file
         os.remove(temp_path)
 
@@ -661,6 +674,16 @@ async def ingest_upload(
             collection_info=result["collection_info"],
         )
     except Exception as e:
+        # Log failed ingest
+        from datetime import datetime
+        failed_log = IngestLog(
+            file_name=file.filename,
+            status="failed",
+            error_msg=str(e),
+            upload_at=datetime.utcnow(),
+        )
+        db.add(failed_log)
+        db.commit()
         if os.path.exists(temp_path):
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=str(e))

@@ -23,7 +23,7 @@ export default function SourceCard({ label, sources, type }) {
   if (!sources || sources.length === 0) return null;
 
   // RAG: only show top 1 result
-  const displaySources = type === 'rag' ? sources.slice(0, 1) : sources;
+  const displaySources = type === 'rag' ? sources.slice(0, 3) : sources;
 
   return (
     <div className="source-cards">
