@@ -43,6 +43,23 @@ class Message(Base):
     sources = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class GeneratedDocument(Base):
+    __tablename__ = "generated_documents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    template_id = Column(String(100), nullable=False)
+    template_name = Column(String(255), nullable=False)
+    field_values = Column(JSONB, nullable=False)
+    filename = Column(String(500), nullable=False)
+    file_content = Column(Text, nullable=False)  # Base64 encoded content
+    mime_type = Column(String(100), default="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationship
+    user = relationship("User")
+
 async def init_auth_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
