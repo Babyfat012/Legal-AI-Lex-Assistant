@@ -70,8 +70,13 @@ def root():
 @app.on_event("startup")
 async def startup_event():
     """Initialize both databases when the app starts"""
+    import asyncio
+
+    # Run both initializations in a thread pool to avoid mixing sync/async
+    loop = asyncio.get_event_loop()
+
     # Initialize main database (sync)
-    init_db()
+    await loop.run_in_executor(None, init_db)
 
     # Initialize auth database (async)
     await init_auth_db()
