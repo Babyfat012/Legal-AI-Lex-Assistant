@@ -23,6 +23,7 @@ from api.routes import router
 from api.auth_routes import router as auth_router
 from api.conversation_routes import router as conv_router
 from api.docgen_routes import router as docgen_router
+from core.database import init_db
 
 app = FastAPI(
     title="Lex - Legal AI Assistant",
@@ -66,6 +67,7 @@ def root():
     }
 
 if __name__ == "__main__":
+    init_db()
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
