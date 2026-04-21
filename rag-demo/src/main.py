@@ -66,9 +66,13 @@ def root():
         "health": "/api/v1/health",
     }
 
-if __name__ == "__main__":
-    # Initialize both databases
+@app.on_event("startup")
+async def startup_event():
+    """Initialize both databases when the app starts"""
+    from core.db_init import init_all_databases
     init_all_databases()
+
+if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
