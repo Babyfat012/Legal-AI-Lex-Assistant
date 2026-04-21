@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api/v1' });
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://legal-ai-lex-assistant-production.up.railway.app/api/v1';
+
+const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 300000, // 5 min for large file uploads
+});
 
 // Auto-attach JWT token
 api.interceptors.request.use((config) => {

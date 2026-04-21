@@ -70,8 +70,13 @@ def root():
 @app.on_event("startup")
 async def startup_event():
     """Initialize both databases when the app starts"""
-    # Initialize auth database (async)
-    await init_auth_db()
+    import asyncio
+
+    # Initialize both databases in parallel
+    await asyncio.gather(
+        init_auth_db(),
+        asyncio.get_event_loop().run_in_executor(None, init_db)
+    )
 
 if __name__ == "__main__":
     uvicorn.run(
