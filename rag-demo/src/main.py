@@ -23,7 +23,8 @@ from api.routes import router
 from api.auth_routes import router as auth_router
 from api.conversation_routes import router as conv_router
 from api.docgen_routes import router as docgen_router
-from core.db_init import init_all_databases
+from core.database import init_db
+from auth.database import init_auth_db
 
 app = FastAPI(
     title="Lex - Legal AI Assistant",
@@ -69,8 +70,11 @@ def root():
 @app.on_event("startup")
 async def startup_event():
     """Initialize both databases when the app starts"""
-    from core.db_init import init_all_databases
-    init_all_databases()
+    # Initialize main database (sync)
+    init_db()
+
+    # Initialize auth database (async)
+    await init_auth_db()
 
 if __name__ == "__main__":
     uvicorn.run(
