@@ -7,10 +7,11 @@ Reuses existing User table from auth/database.py + security.py.
 import os
 import uuid
 from datetime import datetime, timedelta
+import re
 
 import jwt
 from fastapi import APIRouter, HTTPException, Depends, Header
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from sqlalchemy import select
 
 from auth.database import AsyncSessionLocal, User
@@ -37,6 +38,12 @@ class RegisterRequest(BaseModel):
     email: str = Field(..., min_length=1)
     password: str = Field(..., min_length=6)
     full_name: str = Field(default="")
+
+    @validator('email')
+    def validate_email(cls, v):
+        if not re.match(r'^[^@]+@[^@]+\.[^@]+$', v):
+            raise ValueError('Invalid email format')
+        return v.lower()
 
 
 class AuthResponse(BaseModel):
@@ -103,6 +110,9 @@ async def login(req: LoginRequest):
 
 @router.post("/register", response_model=AuthResponse)
 async def register(req: RegisterRequest):
+    # Log the incoming request for debugging
+    logger.debug("Registration attempt | email=%s, full_name=%s", req.email, req.full_name)
+
     async with AsyncSessionLocal() as db:
         # Check if email exists
         result = await db.execute(select(User).where(User.email == req.email))
